@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
+from .base_analyzer import BaseAnalyzer
 from .llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -21,18 +22,16 @@ _AB_TEST_REQUIRED_FIELDS: Dict[str, Any] = {
 }
 
 
-class StrategyAdvisor:
+class StrategyAdvisor(BaseAnalyzer):
     """AI策略顾问"""
 
     def __init__(self, llm_client: LLMClient) -> None:
-        """
-        初始化策略顾问
+        """初始化策略顾问
 
         Args:
             llm_client: LLM客户端实例
         """
-        self.llm: LLMClient = llm_client
-        self.system_prompt: str = self._get_system_prompt()
+        super().__init__(llm_client)
 
     def _get_system_prompt(self) -> str:
         """获取系统Prompt"""
@@ -53,8 +52,7 @@ class StrategyAdvisor:
         lead_profile: Optional[Dict[str, Any]] = None,
         historical_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        生成策略建议
+        """生成策略建议
 
         Args:
             match_result: MatchEngine的输出
@@ -68,54 +66,69 @@ class StrategyAdvisor:
         Raises:
             RuntimeError: LLM调用失败时
         """
-        match_id: str = match_result.get("match_id", "")
-        logger.info("开始生成策略建议，match_id=%s", match_id)
-
-        user_prompt: str = self._build_advice_prompt(
-            match_result, content_feature, lead_profile, historical_data
-        )
-
-        try:
-            result: Dict[str, Any] = self.llm.chat_json(
-                system_prompt=self.system_prompt,
-                user_content=user_prompt,
-                temperature=0.5,  # 策略建议需要一定创造性
-                max_tokens=3000,
-            )
-        except Exception as e:
-            logger.error("策略生成LLM调用失败，match_id=%s，错误=%s", match_id, e)
-            raise RuntimeError(f"策略生成失败: {str(e)}") from e
-
-        validated: Dict[str, Any] = self._validate_output(result)
-
-        logger.info("策略建议生成完成，match_id=%s", match_id)
-
-        return {
-            "strategy_id": str(uuid.uuid4()),
-            "match_id": match_id,
-            "content_id": match_result.get("content_snapshot", {}).get(
-                "content_id", ""
-            ),
-            "lead_id": match_result.get("lead_snapshot", {}).get("lead_id", ""),
-            "strategy": validated,
-            "created_at": datetime.now().isoformat(),
-            "model": self.llm.model,
+        # 使用基类的analyze方法，但传入包含所有策略信息的字典
+        input_data = {
+            "match_result": match_result,
+            "content_feature": content_feature,
+            "lead_profile": lead_profile,
+            "historical_data": historical_data,
         }
+        return super().analyze(input_data)
 
-    def _build_advice_prompt(
+    def _validate_input(self, input_data: Any) -> None:
+        """验证输入数据
+
+        Args:
+            input_data: 输入数据字典
+
+        Raises:
+            ValueError: 匹配结果为空时
+        """
+        if not isinstance(input_data, dict):
+            raise ValueError("输入数据必须是字典类型")
+        match_result = input_data.get("match_result")
+        if not match_result:
+            raise ValueError("匹配结果不能为空")
+
+    def _build_prompt_from_input(self, input_data: Any) -> str:
+        """根据输入数据构建提示词
+
+        Args:
+            input_data: 包含match_result等信息的字典
+
+        Returns:
+            用户提示词字符串
+        """
+        match_result = input_data.get("match_result", {})
+        content_feature = input_data.get("content_feature")
+        lead_profile = input_data.get("lead_profile")
+        historical_data = input_data.get("historical_data")
+        return self._build_prompt(match_result, content_feature, lead_profile, historical_data)
+
+    def _build_prompt(
         self,
         match_result: Dict[str, Any],
         content: Optional[Dict[str, Any]] = None,
         lead: Optional[Dict[str, Any]] = None,
         history: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """构建策略建议Prompt"""
-        match_data: Dict[str, Any] = match_result.get("match_result", {})
-        content_snap: Dict[str, Any] = match_result.get("content_snapshot", {})
-        lead_snap: Dict[str, Any] = match_result.get("lead_snapshot", {})
+        """构建策略建议Prompt
+
+        Args:
+            match_result: MatchEngine的输出
+            content: ContentAnalyzer的输出（可选）
+            lead: LeadAnalyzer的输出（可选）
+            history: 历史数据（可选）
+
+        Returns:
+            用户提示词字符串
+        """
+        match_data = match_result.get("match_result", {})
+        content_snap = match_result.get("content_snapshot", {})
+        lead_snap = match_result.get("lead_snapshot", {})
 
         # 补充详细信息
-        content_detail: str = ""
+        content_detail = ""
         if content:
             content_detail = f"""
 【内容详细信息】
@@ -124,7 +137,7 @@ class StrategyAdvisor:
 - 核心卖点: {', '.join(content.get('key_selling_points', []))}
 - 改进建议: {', '.join(content.get('improvement_suggestions', []))}"""
 
-        lead_detail: str = ""
+        lead_detail = ""
         if lead:
             lead_detail = f"""
 【线索详细信息】
@@ -137,7 +150,7 @@ class StrategyAdvisor:
 - 异议风险: {', '.join(lead.get('objection_risks', []))}
 - 互动策略: {lead.get('engagement_strategy', '')}"""
 
-        history_section: str = ""
+        history_section = ""
         if history:
             history_section = f"""
 【历史数据参考】
@@ -195,31 +208,44 @@ class StrategyAdvisor:
   }}
 }}"""
 
-    def _validate_output(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        校验策略建议输出
+    def _parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        """解析LLM响应
 
         Args:
-            data: LLM返回的原始数据
+            response: LLM返回的原始JSON数据
+
+        Returns:
+            解析后的结构化数据
+        """
+        # 直接返回响应，验证逻辑在_validate_output中处理
+        return response
+
+    def _validate_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
+        """校验策略建议输出
+
+        Args:
+            output: LLM返回的原始数据
 
         Returns:
             校验后的数据
         """
+        output = super()._validate_output(output)
+
         # 确保四大模块存在
-        sections: List[str] = [
+        sections = [
             "content_strategy",
             "distribution_strategy",
             "conversion_prediction",
             "a_b_test_suggestion",
         ]
         for section in sections:
-            if section not in data or not isinstance(data[section], dict):
+            if section not in output or not isinstance(output[section], dict):
                 logger.warning("策略输出缺少模块 '%s'，使用空字典填充", section)
-                data[section] = {}
+                output[section] = {}
 
         # 校验 content_strategy
-        cs: Dict[str, Any] = data["content_strategy"]
-        cs_str_defaults: Dict[str, str] = {
+        cs = output["content_strategy"]
+        cs_str_defaults = {
             "recommended_hook": "待定",
             "hook_rationale": "",
             "recommended_structure": "未知",
@@ -234,28 +260,26 @@ class StrategyAdvisor:
             "keywords_to_include",
             "keywords_to_avoid",
         ]:
-            if field_name not in cs or not isinstance(cs[field_name], list):
-                cs[field_name] = [str(cs[field_name])] if cs.get(field_name) else []
+            self._ensure_list_field(cs, field_name)
 
         # 校验 distribution_strategy
-        ds: Dict[str, Any] = data["distribution_strategy"]
+        ds = output["distribution_strategy"]
         for field_name in ["best_timing", "channel_suggestion"]:
             if field_name not in ds or not isinstance(ds[field_name], str):
                 ds[field_name] = "待定"
 
-        if "follow_up_sequence" not in ds or not isinstance(
-            ds["follow_up_sequence"], list
-        ):
+        # follow_up_sequence 如果不是列表则替换为空列表
+        if "follow_up_sequence" not in ds or not isinstance(ds["follow_up_sequence"], list):
             ds["follow_up_sequence"] = []
 
         # 校验 conversion_prediction
-        cp: Dict[str, Any] = data["conversion_prediction"]
+        cp = output["conversion_prediction"]
         for field_name in ["estimated_conversion_rate", "confidence_level"]:
             if field_name not in cp or not isinstance(cp[field_name], str):
                 cp[field_name] = "未知"
 
         # 置信度枚举校验
-        valid_confidence_levels: List[str] = ["低", "中", "高"]
+        valid_confidence_levels = ["低", "中", "高"]
         if cp["confidence_level"] not in valid_confidence_levels:
             logger.warning(
                 "confidence_level 值 '%s' 无效，应为 %s，已重置为 '中'",
@@ -265,11 +289,10 @@ class StrategyAdvisor:
             cp["confidence_level"] = "中"
 
         for field_name in ["key_success_factors", "potential_blockers"]:
-            if field_name not in cp or not isinstance(cp[field_name], list):
-                cp[field_name] = [str(cp[field_name])] if cp.get(field_name) else []
+            self._ensure_list_field(cp, field_name)
 
         # 校验 a_b_test_suggestion（更完善的字段校验）
-        ab: Dict[str, Any] = data["a_b_test_suggestion"]
+        ab = output["a_b_test_suggestion"]
 
         # 补全缺失字段
         for field_name, default_value in _AB_TEST_REQUIRED_FIELDS.items():
@@ -298,4 +321,43 @@ class StrategyAdvisor:
                 "recommended_sample_size"
             ]
 
-        return data
+        return output
+
+    def _build_result(
+        self, validated_output: Dict[str, Any], input_data: Any
+    ) -> Dict[str, Any]:
+        """构建最终结果
+
+        Args:
+            validated_output: 验证后的输出数据
+            input_data: 原始输入数据
+
+        Returns:
+            最终结果字典
+        """
+        match_result = input_data.get("match_result", {})
+        match_id = match_result.get("match_id", "")
+
+        logger.info("策略建议生成完成，match_id=%s", match_id)
+
+        return {
+            "strategy_id": str(uuid.uuid4()),
+            "match_id": match_id,
+            "content_id": match_result.get("content_snapshot", {}).get(
+                "content_id", ""
+            ),
+            "lead_id": match_result.get("lead_snapshot", {}).get("lead_id", ""),
+            "strategy": validated_output,
+            "created_at": datetime.now().isoformat(),
+            "model": self.llm.model,
+        }
+
+    def _get_temperature(self) -> float:
+        """获取LLM温度参数
+
+        策略建议需要一定创造性
+
+        Returns:
+            温度参数值
+        """
+        return 0.5

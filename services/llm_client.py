@@ -13,6 +13,8 @@ from typing import Optional, Dict, Any, List, Iterator, Callable, Tuple
 import httpx
 from openai import OpenAI
 
+from services.llm_cache import LLMCache
+
 logger = logging.getLogger(__name__)
 
 
@@ -132,6 +134,9 @@ class LLMClient:
             timeout=httpx.Timeout(60.0, connect=10.0),
             max_retries=2,
         )
+
+        # 初始化 LLM 缓存
+        self._llm_cache = LLMCache()
 
         logger.info(
             "LLMClient 初始化完成: model=%s, base_url=%s",
@@ -282,6 +287,7 @@ class LLMClient:
         temperature: float = 0.1,
         max_tokens: Optional[int] = None,
         max_retries: int = 2,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         JSON模式调用 - 确保输出合法JSON
@@ -292,13 +298,28 @@ class LLMClient:
             temperature: 温度参数（默认0.1，保证稳定性）
             max_tokens: 最大输出token数
             max_retries: 最大重试次数
+            use_cache: 是否使用缓存（默认True）
 
         Returns:
             解析后的JSON字典
         """
+        # 构建消息列表
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
+
+        # 检查缓存
+        if use_cache:
+            cached_response = self._llm_cache.get(messages, self.model, temperature=temperature, max_tokens=max_tokens)
+            if cached_response is not None:
+                logger.debug("LLM 缓存命中")
+                return cached_response
+
         # 在方法开头初始化，确保 except 块中始终可用
         raw: Optional[str] = None
         content: Optional[str] = None
+        response: Optional[Dict[str, Any]] = None
 
         for attempt in range(max_retries + 1):
             try:
@@ -317,25 +338,31 @@ class LLMClient:
                     )
                     # 尝试提取JSON
                     json_str = self._extract_json(raw)
-                    return json.loads(json_str)
+                    response = json.loads(json_str)
+                else:
+                    # 支持json mode的模型
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ]
+                    api_response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens or self.config["max_tokens_default"],
+                        response_format={"type": "json_object"},
+                    )
+                    self._record_usage(api_response)
+                    content = api_response.choices[0].message.content
+                    if not content:
+                        raise RuntimeError("模型返回了空内容，请重试或调整prompt")
+                    response = json.loads(content)
 
-                # 支持json mode的模型
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ]
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens or self.config["max_tokens_default"],
-                    response_format={"type": "json_object"},
-                )
-                self._record_usage(response)
-                content = response.choices[0].message.content
-                if not content:
-                    raise RuntimeError("模型返回了空内容，请重试或调整prompt")
-                return json.loads(content)
+                # 缓存结果
+                if use_cache and response is not None:
+                    self._llm_cache.set(messages, self.model, response, temperature=temperature, max_tokens=max_tokens)
+
+                return response
 
             except json.JSONDecodeError as e:
                 # 安全地获取可用于修复的文本
@@ -358,7 +385,11 @@ class LLMClient:
                         "chat_json() 最后一次尝试仍失败，尝试自动修复JSON: %s",
                         e,
                     )
-                    return self._repair_json(repair_text)
+                    response = self._repair_json(repair_text)
+                    # 缓存修复后的结果
+                    if use_cache:
+                        self._llm_cache.set(messages, self.model, response, temperature=temperature, max_tokens=max_tokens)
+                    return response
                 logger.debug(
                     "chat_json() 第 %d 次尝试 JSONDecodeError，将重试: %s",
                     attempt + 1,
@@ -574,6 +605,7 @@ class LLMClient:
                 "cost_per_1k_input": self.config.get("cost_per_1k_input", 0),
                 "cost_per_1k_output": self.config.get("cost_per_1k_output", 0),
             },
+            "cache_stats": self._llm_cache.get_stats(),
         }
 
         # 如果提供了数据库实例，获取历史统计
@@ -590,6 +622,15 @@ class LLMClient:
                 summary["database_stats"] = {"error": str(e)}
 
         return summary
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """获取 LLM 缓存统计"""
+        return self._llm_cache.get_stats()
+
+    def clear_cache(self) -> None:
+        """清空 LLM 缓存"""
+        self._llm_cache._cache.clear()
+        logger.info("LLM 缓存已清空")
 
 
 # ===== 使用示例 =====

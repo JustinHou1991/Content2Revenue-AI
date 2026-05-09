@@ -323,7 +323,7 @@ class Orchestrator:
 
     def get_dashboard_data(self, recent_limit: int = 5) -> Dict[str, Any]:
         """
-        获取仪表盘数据
+        获取仪表盘数据（优化版）
 
         Args:
             recent_limit: 获取最近记录的数量
@@ -332,45 +332,25 @@ class Orchestrator:
             仪表盘数据字典，包含统计信息、平均分和最近记录
         """
         logger.info("获取仪表盘数据, recent_limit=%d", recent_limit)
-        stats = self.db.get_stats()
 
-        # 获取最近的分析记录
-        recent_contents = self.db.get_all_content_analyses(limit=recent_limit)
-        recent_leads = self.db.get_all_lead_analyses(limit=recent_limit)
+        # 使用优化的单连接查询获取统计数据
+        stats = self.db.get_dashboard_stats_optimized()
+
+        # 只在需要详细数据时才查询列表（使用分页查询）
+        recent_contents, _ = self.db.get_content_analyses_paginated(page=1, page_size=recent_limit)
+        recent_leads, _ = self.db.get_lead_analyses_paginated(page=1, page_size=recent_limit)
         recent_matches = self.db.get_all_match_results(limit=recent_limit)
 
-        # 计算最近 N 条记录的平均分
-        content_scores: List[float] = []
-        for c in recent_contents:
-            score = c.get("analysis_json", {}).get("content_score", 0)
-            if score:
-                content_scores.append(float(score))
-
-        lead_scores: List[float] = []
-        for lead in recent_leads:
-            score = lead.get("profile_json", {}).get("lead_score", 0)
-            if score:
-                lead_scores.append(float(score))
-
-        match_scores: List[float] = []
-        for m in recent_matches:
-            score = m.get("match_result_json", {}).get("overall_score", 0)
-            if score:
-                match_scores.append(float(score))
-
         dashboard = {
-            "stats": stats,
-            "avg_content_score_recent": (
-                round(sum(content_scores) / len(content_scores), 1)
-                if content_scores
-                else 0
-            ),
-            "avg_lead_score_recent": (
-                round(sum(lead_scores) / len(lead_scores), 1) if lead_scores else 0
-            ),
-            "avg_match_score_recent": (
-                round(sum(match_scores) / len(match_scores), 1) if match_scores else 0
-            ),
+            "stats": {
+                "content_count": stats["content_count"],
+                "lead_count": stats["lead_count"],
+                "match_count": stats["match_count"],
+                "strategy_count": stats["strategy_count"],
+            },
+            "avg_content_score_recent": stats["avg_content_score"],
+            "avg_lead_score_recent": stats["avg_lead_score"],
+            "avg_match_score_recent": stats["avg_match_score"],
             "score_basis_count": recent_limit,
             "recent_contents": recent_contents[:3],
             "recent_leads": recent_leads[:3],

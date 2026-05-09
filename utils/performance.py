@@ -16,6 +16,36 @@ logger = get_logger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
+def monitor_performance(threshold_ms: float = 1000):
+    """性能监控装饰器
+
+    监控函数执行时间，超过阈值时记录警告日志。
+
+    Args:
+        threshold_ms: 慢操作阈值（毫秒），默认1000ms
+
+    Example:
+        @monitor_performance(threshold_ms=500)
+        def my_slow_function():
+            time.sleep(0.6)
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            start = time.perf_counter()
+            try:
+                result = func(*args, **kwargs)
+                return result
+            finally:
+                elapsed = (time.perf_counter() - start) * 1000
+                if elapsed > threshold_ms:
+                    logger.warning(f"慢操作: {func.__name__} 耗时 {elapsed:.2f}ms")
+                else:
+                    logger.debug(f"{func.__name__} 耗时 {elapsed:.2f}ms")
+        return wrapper
+    return decorator
+
+
 def timing_decorator(func: F) -> F:
     """
     计时装饰器 - 记录函数执行时间

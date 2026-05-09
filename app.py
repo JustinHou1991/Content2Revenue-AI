@@ -13,6 +13,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 初始化统一日志系统（尽早执行，确保所有后续模块都能使用）
 from utils.logger import setup_logging, get_logger
 from config import get_config
+from services.health_check import HealthChecker
+
+# 初始化健康检查器
+health_checker = HealthChecker()
 
 try:
     # 尝试从 config 获取日志配置；如果 Streamlit secrets 尚不可用则使用默认值
@@ -189,6 +193,24 @@ def main():
         else:
             st.error("系统未连接")
             st.info("请在「系统设置」中配置API Key")
+
+        # 健康状态指示
+        st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
+        try:
+            health = health_checker.run_all_checks()
+            status_color = {"healthy": "green", "warning": "orange", "unhealthy": "red"}
+            color = status_color.get(health["overall_status"], "gray")
+            st.markdown(f"**系统健康**: :{color}[{health['overall_status'].upper()}]")
+
+            # 展开显示详细状态
+            with st.expander("查看详情"):
+                for check_name, check_result in health["checks"].items():
+                    check_status = check_result.get("status", "unknown")
+                    check_color = status_color.get(check_status, "gray")
+                    st.markdown(f"- {check_name}: :{check_color}[{check_status}]")
+        except Exception as e:
+            st.markdown("**系统健康**: :gray[UNKNOWN]")
+            logger.warning("健康检查失败: %s", e)
 
     # 路由到对应页面
     try:

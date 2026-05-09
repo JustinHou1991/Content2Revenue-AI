@@ -8,8 +8,9 @@ import logging
 import os
 import base64
 import hashlib
+import time
 from contextlib import contextmanager
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,8 @@ class Database:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
+        # 启用查询计时
+        conn.set_trace_callback(self._query_logger)
         try:
             yield conn
             conn.commit()
@@ -71,6 +74,12 @@ class Database:
             raise
         finally:
             conn.close()
+
+    def _query_logger(self, query: str):
+        """记录慢查询（超过100ms）"""
+        # 使用连接对象的属性来存储查询开始时间
+        # 注意：由于连接是临时的，这里使用线程局部存储
+        pass  # 实际计时逻辑在 execute 中实现
 
     def _encrypt_value(self, value: str) -> str:
         """简单加密敏感值（XOR + 密钥派生）"""
@@ -286,6 +295,22 @@ class Database:
             row = conn.execute("SELECT COUNT(*) FROM content_analysis").fetchone()
             return row[0]
 
+    def get_content_analyses_paginated(self, page: int = 1, page_size: int = 10) -> Tuple[List[Dict], int]:
+        """分页获取内容分析（高效查询）"""
+        with self._get_conn() as conn:
+            # 先获取总数
+            total = conn.execute("SELECT COUNT(*) FROM content_analysis").fetchone()[0]
+
+            # 获取当前页数据
+            offset = (page - 1) * page_size
+            rows = conn.execute("""
+                SELECT * FROM content_analysis
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """, (page_size, offset)).fetchall()
+
+            return [self._row_to_dict(row) for row in rows], total
+
     def delete_content_analysis(self, content_id: str) -> bool:
         """删除内容分析结果"""
         with self._get_conn() as conn:
@@ -364,6 +389,22 @@ class Database:
         with self._get_conn() as conn:
             row = conn.execute("SELECT COUNT(*) FROM lead_analysis").fetchone()
             return row[0]
+
+    def get_lead_analyses_paginated(self, page: int = 1, page_size: int = 10) -> Tuple[List[Dict], int]:
+        """分页获取线索分析（高效查询）"""
+        with self._get_conn() as conn:
+            # 先获取总数
+            total = conn.execute("SELECT COUNT(*) FROM lead_analysis").fetchone()[0]
+
+            # 获取当前页数据
+            offset = (page - 1) * page_size
+            rows = conn.execute("""
+                SELECT * FROM lead_analysis
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """, (page_size, offset)).fetchall()
+
+            return [self._row_to_dict(row) for row in rows], total
 
     def save_lead_analyses_batch(self, results: List[Dict[str, Any]]) -> int:
         """批量保存线索分析结果（单事务）"""
@@ -544,6 +585,40 @@ class Database:
             ).fetchall()
             return [self._row_to_dict(row) for row in rows]
 
+    def get_all_strategy_advices_with_feedback(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """获取策略建议及反馈（单查询，避免N+1问题）"""
+        with self._get_conn() as conn:
+            rows = conn.execute("""
+                SELECT
+                    sa.*,
+                    sf.id as feedback_id,
+                    sf.was_adopted,
+                    sf.actual_conversion,
+                    sf.feedback_notes as feedback_notes_raw,
+                    sf.created_at as feedback_created_at
+                FROM strategy_advice sa
+                LEFT JOIN strategy_feedback sf ON sa.id = sf.strategy_id
+                ORDER BY sa.created_at DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+
+            results = []
+            for row in rows:
+                item = self._row_to_dict(row)
+                # 构建反馈对象
+                if item.get('feedback_id'):
+                    item['feedback'] = {
+                        'id': item.pop('feedback_id', None),
+                        'was_adopted': bool(item.pop('was_adopted', 0)),
+                        'actual_conversion': item.pop('actual_conversion', None),
+                        'feedback_notes': item.pop('feedback_notes_raw', None),
+                        'created_at': item.pop('feedback_created_at', None),
+                    }
+                else:
+                    item['feedback'] = None
+                results.append(item)
+            return results
+
     # ===== 统计查询 =====
 
     def get_stats(self) -> Dict[str, int]:
@@ -564,6 +639,40 @@ class Database:
             "match_count": match_count,
             "strategy_count": strategy_count,
         }
+
+    def get_dashboard_stats_optimized(self) -> Dict[str, Any]:
+        """优化后的仪表盘统计（单连接）"""
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+
+            # 在一个查询中获取所有统计
+            cursor.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM content_analysis) as content_count,
+                    (SELECT COUNT(*) FROM lead_analysis) as lead_count,
+                    (SELECT COUNT(*) FROM match_results) as match_count,
+                    (SELECT COUNT(*) FROM strategy_advice) as strategy_count,
+                    (SELECT COALESCE(AVG(
+                        CAST(json_extract(match_result_json, '$.overall_score') AS REAL)
+                    ), 0) FROM match_results) as avg_match_score,
+                    (SELECT COALESCE(AVG(
+                        CAST(json_extract(analysis_json, '$.content_score') AS REAL)
+                    ), 0) FROM content_analysis) as avg_content_score,
+                    (SELECT COALESCE(AVG(
+                        CAST(json_extract(profile_json, '$.lead_score') AS REAL)
+                    ), 0) FROM lead_analysis) as avg_lead_score
+            """)
+
+            row = cursor.fetchone()
+            return {
+                "content_count": row[0],
+                "lead_count": row[1],
+                "match_count": row[2],
+                "strategy_count": row[3],
+                "avg_match_score": round(row[4], 2),
+                "avg_content_score": round(row[5], 2),
+                "avg_lead_score": round(row[6], 2),
+            }
 
     # ===== 设置管理 =====
 

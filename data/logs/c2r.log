@@ -65,3 +65,4 @@ Traceback (most recent call last):
   File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
     raise StreamlitSecretNotFoundError(error_msg)
 streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+2026-05-09 06:38:18 | INFO     | root                           | 日志系统初始化完成: level=INFO, log_file=/workspace/content2revenue/data/logs/c2r.log
