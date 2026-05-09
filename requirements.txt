@@ -11,7 +11,12 @@ openpyxl>=3.1.0
 # PDF导出
 reportlab>=4.0.0
 
+# 核心模块依赖
+pyyaml>=6.0
+cryptography>=41.0
+
 # 代码质量工具
 black>=24.0.0
 flake8>=7.0.0
 mypy>=1.9.0
+pytest>=7.0.0

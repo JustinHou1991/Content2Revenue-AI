@@ -7,6 +7,67 @@
 
 ---
 
+## [2.1.0] - 2026-05-09
+
+### 核心架构 (core/)
+
+#### 新增 8 个企业级核心模块
+- **BackupManager** - 数据库在线备份、SHA-256 完整性校验、版本回滚
+- **EventBus** - 发布-订阅事件总线、5 级优先级、同步/异步处理
+- **ConfigCenter** - 多环境配置管理、嵌套键支持、Fernet 加密存储
+- **MigrationManager** - 数据库版本控制、自动迁移、回滚支持
+- **WorkflowEngine** - DAG 任务编排、并行执行、失败重试、超时控制
+- **RuleEngine** - DSL 规则定义、复杂条件组合（AND/OR/NOT）、热更新
+- **DataValidator** - 声明式验证、多类型支持、嵌套对象验证、数据清洗
+- **ReportEngine** - 多维度分析、聚合函数、JSON/CSV/HTML/Markdown 导出
+
+### 代码质量优化
+
+#### 修复 5 个 Critical 级别问题
+- 第三方依赖（yaml/cryptography）添加容错导入
+- 修复裸 except 捕获 SystemExit/KeyboardInterrupt
+- 修复数据库连接泄漏（嵌套 try/finally）
+- 修复 workflow timeout=None 导致 TypeError
+- 添加递归深度保护防止栈溢出
+
+#### 修复 6 个 High 级别问题
+- 备份恢复失败时自动从临时备份还原
+- EventBus 读取 handlers 时添加线程锁
+- 迁移 ID 比较改为精确匹配
+- 插件系统初始化添加循环依赖检测
+- 规则链添加循环检测防止无限递归
+
+#### 修复 11 个 Medium 级别问题
+- 清理所有未使用的导入
+- 移除模块级 logging.basicConfig() 避免干扰应用日志
+- HTML 导出添加 XSS 转义
+- 工作流拓扑排序添加环检测
+- fnmatch/hashlib 导入移至文件顶部
+
+### 测试
+
+#### 新增 21 个核心模块集成测试
+- BackupManager: 备份创建、回滚、完整性验证
+- EventBus: 发布订阅、优先级排序、取消订阅
+- ConfigCenter: 配置管理
+- MigrationManager: 迁移执行与回滚
+- WorkflowEngine: 顺序执行、并行执行、循环依赖检测
+- RuleEngine: 规则执行、复杂条件、循环链检测
+- DataValidator: 基本验证、嵌套验证、空值边界
+- ReportEngine: 报表生成、导出、空数据处理
+- 完整业务流程集成测试
+
+### 依赖更新
+- 新增 `pyyaml>=6.0`（配置中心 YAML 支持）
+- 新增 `cryptography>=41.0`（配置加密）
+- 新增 `pytest>=7.0.0`（测试框架）
+
+### 文档
+- 新增 `docs/CORE_MODULES.md` - 核心模块 API 文档
+- 更新 `docs/ROADMAP_v2.md` - Phase 2 全部标记完成
+
+---
+
 ## [2.0.0] - 2024-01-15
 
 ### 架构重构
