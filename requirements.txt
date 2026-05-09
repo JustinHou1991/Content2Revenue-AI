@@ -1,0 +1,17 @@
+streamlit>=1.35.0
+openai>=1.12.0
+httpx>=0.24.0
+plotly>=5.19.0
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Excel导出
+openpyxl>=3.1.0
+
+# PDF导出
+reportlab>=4.0.0
+
+# 代码质量工具
+black>=24.0.0
+flake8>=7.0.0
+mypy>=1.9.0

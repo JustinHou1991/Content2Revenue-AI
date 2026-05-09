@@ -1,0 +1,39 @@
+# Content2Revenue AI 项目规则
+
+## 技术栈
+- 前端+后端：Streamlit（单体应用，不使用FastAPI）
+- 数据库：SQLite（使用Python内置sqlite3模块）
+- AI：OpenAI兼容SDK（DeepSeek/通义千问）
+- 数据：Pandas, SQLite
+- 代码风格：PEP 8, 类型注解, docstring
+
+## 设计原则
+- 代码简洁优先，避免过度抽象
+- 所有AI调用使用结构化输出(JSON Schema)
+- 错误处理要优雅，给用户友好的提示
+- 中文注释，英文代码标识符
+
+## Streamlit特定规则
+- 不要在Streamlit文件中使用 if __name__ == "__main__"
+- 使用 st.session_state 管理应用状态
+- 使用 @st.cache_data 缓存昂贵的API调用
+- 使用 st.spinner/st.status 显示加载状态
+- 使用 st.secrets 管理API密钥，绝不硬编码
+- 错误处理使用 try/except，用 st.error() 显示友好错误信息
+
+## 项目结构
+- app.py 是主入口
+- pages/ 目录存放多页面
+- services/ 目录存放业务逻辑（database.py, llm.py, prompts.py）
+- 页面文件只关注UI展示，业务逻辑放在services/中
+
+## 数据库规则
+- 使用sqlite3模块，不使用ORM（如SQLAlchemy）
+- 数据库文件放在 data/ 目录
+- 每次启动时检查并创建必要的表
+
+## AI调用规则
+- 使用OpenAI兼容SDK
+- 支持流式输出（stream=True）
+- Prompt模板统一放在 prompts/ 目录
+- API调用统一封装在 services/llm_client.py

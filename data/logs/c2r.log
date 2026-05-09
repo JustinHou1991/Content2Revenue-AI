@@ -1,0 +1,67 @@
+2026-05-09 01:28:11 | INFO     | root                           | 日志系统初始化完成: level=INFO, log_file=/workspace/content2revenue/data/logs/c2r.log
+2026-05-09 01:28:12 | ERROR    | __main__                       | 初始化 Orchestrator 失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+Traceback (most recent call last):
+  File "/workspace/content2revenue/app.py", line 88, in init_orchestrator
+    model = st.secrets.get("MODEL", "deepseek-chat")
+  File "/usr/lib/python3.10/_collections_abc.py", line 824, in get
+    return self[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 581, in __getitem__
+    value = self._parse()[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+2026-05-09 01:28:17 | ERROR    | __main__                       | 初始化 Orchestrator 失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+Traceback (most recent call last):
+  File "/workspace/content2revenue/app.py", line 88, in init_orchestrator
+    model = st.secrets.get("MODEL", "deepseek-chat")
+  File "/usr/lib/python3.10/_collections_abc.py", line 824, in get
+    return self[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 581, in __getitem__
+    value = self._parse()[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+2026-05-09 01:28:49 | ERROR    | __main__                       | 初始化 Orchestrator 失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+Traceback (most recent call last):
+  File "/workspace/content2revenue/app.py", line 88, in init_orchestrator
+    model = st.secrets.get("MODEL", "deepseek-chat")
+  File "/usr/lib/python3.10/_collections_abc.py", line 824, in get
+    return self[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 581, in __getitem__
+    value = self._parse()[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+2026-05-09 01:28:52 | ERROR    | __main__                       | 初始化 Orchestrator 失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+Traceback (most recent call last):
+  File "/workspace/content2revenue/app.py", line 88, in init_orchestrator
+    model = st.secrets.get("MODEL", "deepseek-chat")
+  File "/usr/lib/python3.10/_collections_abc.py", line 824, in get
+    return self[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 581, in __getitem__
+    value = self._parse()[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+2026-05-09 01:29:56 | ERROR    | __main__                       | 初始化 Orchestrator 失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+Traceback (most recent call last):
+  File "/workspace/content2revenue/app.py", line 88, in init_orchestrator
+    model = st.secrets.get("MODEL", "deepseek-chat")
+  File "/usr/lib/python3.10/_collections_abc.py", line 824, in get
+    return self[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 581, in __getitem__
+    value = self._parse()[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+2026-05-09 01:37:42 | ERROR    | __main__                       | 初始化 Orchestrator 失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
+Traceback (most recent call last):
+  File "/workspace/content2revenue/app.py", line 88, in init_orchestrator
+    model = st.secrets.get("MODEL", "deepseek-chat")
+  File "/usr/lib/python3.10/_collections_abc.py", line 824, in get
+    return self[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 581, in __getitem__
+    value = self._parse()[key]
+  File "/usr/local/lib/python3.10/dist-packages/streamlit/runtime/secrets.py", line 414, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
