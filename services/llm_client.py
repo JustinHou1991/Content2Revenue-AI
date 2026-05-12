@@ -198,7 +198,7 @@ class LLMClient:
             api_key=key,
             base_url=self.config["base_url"],
             timeout=httpx.Timeout(60.0, connect=10.0),
-            max_retries=2,
+            max_retries=0,  # 禁用内置重试，使用手动重试逻辑避免叠加
         )
 
         # 初始化 LLM 缓存
@@ -321,7 +321,7 @@ class LLMClient:
 
     @property
     def total_cost(self) -> float:
-        """累计成本（人民币）"""
+        """累计成本（美元，基于官方定价）"""
         return self.estimate_cost(self._total_input_tokens, self._total_output_tokens)
 
     def reset_usage_stats(self) -> None:
@@ -563,13 +563,39 @@ class LLMClient:
                 temperature=temperature,
                 stream=True,
             )
+            # 收集完整内容用于记录用量
+            full_content_parts: List[str] = []
             for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:
+                    full_content_parts.append(delta.content)
                     yield delta.content
+            # 流结束后记录 token 用量
+            full_content = "".join(full_content_parts)
+            # 估算 token 数（流式响应没有 usage 字段）
+            input_tokens = self._estimate_tokens(messages)
+            output_tokens = self._estimate_tokens_from_text(full_content)
+            with self._lock:
+                self._total_input_tokens += input_tokens
+                self._total_output_tokens += output_tokens
+                self._total_calls += 1
+            logger.debug(
+                "chat_stream() token用量: input=%d, output=%d",
+                input_tokens,
+                output_tokens,
+            )
         except Exception as e:
             logger.error("chat_stream() 流式调用失败: %s", e)
             raise RuntimeError(f"流式调用失败: {str(e)}")
+
+    def _estimate_tokens(self, messages: List[Dict[str, str]]) -> int:
+        """估算消息列表的 token 数（简单估算：1 token ≈ 4 字符）"""
+        total_chars = sum(len(m.get("content", "")) for m in messages)
+        return total_chars // 4
+
+    def _estimate_tokens_from_text(self, text: str) -> int:
+        """估算文本的 token 数"""
+        return len(text) // 4
 
     # ===== 内部辅助方法 =====
 
@@ -776,7 +802,7 @@ class LLMClient:
 
     def clear_cache(self) -> None:
         """清空 LLM 缓存"""
-        self._llm_cache._cache.clear()
+        self._llm_cache.clear()
         logger.info("LLM 缓存已清空")
 
 

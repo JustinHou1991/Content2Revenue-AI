@@ -127,28 +127,36 @@ class StrategyAdvisor(BaseAnalyzer):
         content_snap = match_result.get("content_snapshot", {})
         lead_snap = match_result.get("lead_snapshot", {})
 
+        # 提取并转义字段值，防止Prompt注入
+        def _safe_get(data: Dict, key: str, default: str = "未知") -> str:
+            value = data.get(key, default)
+            if not isinstance(value, str):
+                value = str(value)
+            value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            return value
+
         # 补充详细信息
         content_detail = ""
         if content:
             content_detail = f"""
 【内容详细信息】
-- Hook类型: {content.get('hook_type', '未知')}
-- 话题标签: {', '.join(content.get('topic_tags', []))}
-- 核心卖点: {', '.join(content.get('key_selling_points', []))}
-- 改进建议: {', '.join(content.get('improvement_suggestions', []))}"""
+- Hook类型: {_safe_get(content, 'hook_type')}
+- 话题标签: {', '.join(content.get('topic_tags') or [])}
+- 核心卖点: {', '.join(content.get('key_selling_points') or [])}
+- 改进建议: {', '.join(content.get('improvement_suggestions') or [])}"""
 
         lead_detail = ""
         if lead:
             lead_detail = f"""
 【线索详细信息】
-- 公司阶段: {lead.get('company_stage', '未知')}
-- 决策角色: {lead.get('role', '未知')}
-- 核心痛点: {', '.join(lead.get('pain_points', []))}
-- 紧迫程度: {lead.get('urgency', '未知')}
-- 预算准备: {lead.get('budget_readiness', '未知')}
-- 决策标准: {', '.join(lead.get('decision_criteria', []))}
-- 异议风险: {', '.join(lead.get('objection_risks', []))}
-- 互动策略: {lead.get('engagement_strategy', '')}"""
+- 公司阶段: {_safe_get(lead, 'company_stage')}
+- 决策角色: {_safe_get(lead, 'role')}
+- 核心痛点: {', '.join(lead.get('pain_points') or [])}
+- 紧迫程度: {_safe_get(lead, 'urgency')}
+- 预算准备: {_safe_get(lead, 'budget_readiness')}
+- 决策标准: {', '.join(lead.get('decision_criteria') or [])}
+- 异议风险: {', '.join(lead.get('objection_risks') or [])}
+- 互动策略: {_safe_get(lead, 'engagement_strategy')}"""
 
         history_section = ""
         if history:
@@ -159,20 +167,20 @@ class StrategyAdvisor(BaseAnalyzer):
         return f"""基于以下匹配分析结果，生成具体可执行的内容策略建议：
 
 【匹配分析】
-- 综合匹配度: {match_data.get('overall_score', '未知')}/10
+- 综合匹配度: {_safe_get(match_data, 'overall_score')}/10
 - 维度评分:
-  · 受众匹配: {match_data.get('dimension_scores', {}).get('audience_fit', '未知')}/10
-  · 痛点相关: {match_data.get('dimension_scores', {}).get('pain_point_relevance', '未知')}/10
-  · 阶段对齐: {match_data.get('dimension_scores', {}).get('stage_alignment', '未知')}/10
-  · CTA适当: {match_data.get('dimension_scores', {}).get('cta_appropriateness', '未知')}/10
-  · 情感共鸣: {match_data.get('dimension_scores', {}).get('emotion_resonance', '未知')}/10
-- 匹配理由: {match_data.get('match_reason', '')}
-- 风险因素: {', '.join(match_data.get('risk_factors', []))}
-- 跟进建议: {match_data.get('recommended_follow_up', '')}
+  · 受众匹配: {_safe_get(match_data.get('dimension_scores', {}), 'audience_fit')}/10
+  · 痛点相关: {_safe_get(match_data.get('dimension_scores', {}), 'pain_point_relevance')}/10
+  · 阶段对齐: {_safe_get(match_data.get('dimension_scores', {}), 'stage_alignment')}/10
+  · CTA适当: {_safe_get(match_data.get('dimension_scores', {}), 'cta_appropriateness')}/10
+  · 情感共鸣: {_safe_get(match_data.get('dimension_scores', {}), 'emotion_resonance')}/10
+- 匹配理由: {_safe_get(match_data, 'match_reason', '')}
+- 风险因素: {', '.join(match_data.get('risk_factors') or [])}
+- 跟进建议: {_safe_get(match_data, 'recommended_follow_up', '')}
 
 【内容快照】
-- 行业: {content_snap.get('industry', lead_snap.get('industry', '未知'))}
-- 痛点: {', '.join(content_snap.get('pain_points', lead_snap.get('pain_points', [])))}
+- 行业: {_safe_get(content_snap, 'industry', _safe_get(lead_snap, 'industry'))}
+- 痛点: {', '.join(content_snap.get('pain_points') or lead_snap.get('pain_points') or [])}
 {content_detail}
 {lead_detail}
 {history_section}

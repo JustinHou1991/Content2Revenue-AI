@@ -109,29 +109,38 @@ class MatchEngine(BaseAnalyzer):
         Returns:
             用户提示词字符串
         """
+        # 提取并转义字段值，防止Prompt注入
+        def _safe_get(data: Dict, key: str, default: str = "未知") -> str:
+            value = data.get(key, default)
+            if not isinstance(value, str):
+                value = str(value)
+            # 转义 XML 特殊字符，防止注入
+            value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            return value
+
         return f"""请评估以下内容与线索的匹配程度：
 
 【内容特征】
-- Hook类型: {content.get('hook_type', '未知')}
-- 情感基调: {content.get('emotion_tone', '未知')}
-- 叙事结构: {content.get('narrative_structure', '未知')}
-- CTA类型: {content.get('cta_type', '未知')}
-- 目标受众: {content.get('target_audience', '未知')}
-- 内容类型: {content.get('content_category', '未知')}
-- 转化阶段: {content.get('estimated_conversion_stage', '未知')}
+- Hook类型: {_safe_get(content, 'hook_type')}
+- 情感基调: {_safe_get(content, 'emotion_tone')}
+- 叙事结构: {_safe_get(content, 'narrative_structure')}
+- CTA类型: {_safe_get(content, 'cta_type')}
+- 目标受众: {_safe_get(content, 'target_audience')}
+- 内容类型: {_safe_get(content, 'content_category')}
+- 转化阶段: {_safe_get(content, 'estimated_conversion_stage')}
 - 话题标签: {', '.join(content.get('topic_tags') or [])}
 - 核心卖点: {', '.join(content.get('key_selling_points') or [])}
 
 【线索画像】
-- 行业: {lead.get('industry', '未知')}
-- 公司阶段: {lead.get('company_stage', '未知')}
-- 决策角色: {lead.get('role', '未知')}
+- 行业: {_safe_get(lead, 'industry')}
+- 公司阶段: {_safe_get(lead, 'company_stage')}
+- 决策角色: {_safe_get(lead, 'role')}
 - 核心痛点: {', '.join(lead.get('pain_points') or [])}
-- 购买阶段: {lead.get('buying_stage', '未知')}
-- 紧迫程度: {lead.get('urgency', '未知')}
-- 意向度: {lead.get('intent_level', '未知')}/10
-- 推荐内容类型: {lead.get('recommended_content_type', '未知')}
-- 推荐CTA: {lead.get('recommended_cta', '未知')}
+- 购买阶段: {_safe_get(lead, 'buying_stage')}
+- 紧迫程度: {_safe_get(lead, 'urgency')}
+- 意向度: {_safe_get(lead, 'intent_level')}/10
+- 推荐内容类型: {_safe_get(lead, 'recommended_content_type')}
+- 推荐CTA: {_safe_get(lead, 'recommended_cta')}
 
 【输出格式要求】
 请严格按照以下JSON格式输出：
@@ -309,6 +318,19 @@ class MatchEngine(BaseAnalyzer):
                 tasks.append((lead_idx, content_idx, content_feature, lead_profile, content_id, lead_id))
 
         total_tasks = len(tasks)
+
+        # 任务数量上限保护
+        MAX_TASKS = 500  # 最多 500 个匹配任务
+        if total_tasks > MAX_TASKS:
+            logger.warning(
+                "匹配任务数量 %d 超过上限 %d，将只处理前 %d 个任务",
+                total_tasks,
+                MAX_TASKS,
+                MAX_TASKS,
+            )
+            tasks = tasks[:MAX_TASKS]
+            total_tasks = MAX_TASKS
+
         logger.info("共生成 %d 个匹配任务，开始并发执行", total_tasks)
 
         # ---- 并发执行所有匹配任务 ----
@@ -376,13 +398,16 @@ class MatchEngine(BaseAnalyzer):
             finally:
                 with count_lock:
                     completed_count += 1
-                if completed_count % 10 == 0 or completed_count == total_tasks:
+                    current_count = completed_count
+                    current_errors = error_count
+                # 在锁外读取，避免竞态，但可能读到稍旧的值（可接受）
+                if current_count % 10 == 0 or current_count == total_tasks:
                     logger.info(
                         "匹配进度: %d/%d (成功: %d, 失败: %d)",
-                        completed_count,
+                        current_count,
                         total_tasks,
-                        completed_count - error_count,
-                        error_count,
+                        current_count - current_errors,
+                        current_errors,
                     )
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

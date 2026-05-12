@@ -34,3 +34,7 @@ class LLMCache:
     def get_stats(self) -> Dict[str, Any]:
         """获取缓存统计"""
         return self._cache.get_stats()
+
+    def clear(self) -> None:
+        """清空缓存"""
+        self._cache.clear()
