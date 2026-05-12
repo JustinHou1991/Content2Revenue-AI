@@ -130,13 +130,9 @@ def render_dashboard():
         divider()
 
         def _go_to_settings():
-            # 动态计算"系统设置"在导航列表中的索引
-            nav_labels = [
-                "📊 仪表盘", "📝 内容分析", "👤 线索分析",
-                "🎯 匹配中心", "💡 策略建议", "💰 成本分析", "⚙️ 系统设置",
-            ]
-            if "⚙️ 系统设置" in nav_labels:
-                st.session_state.nav_page = nav_labels.index("⚙️ 系统设置")
+            # Streamlit radio 的值存储在 session_state[key] 中
+            # 直接设置 radio 的值为目标页面名称即可实现跳转
+            st.session_state.sidebar_nav = "⚙️ 系统设置"
             st.rerun()
 
         empty_state(
