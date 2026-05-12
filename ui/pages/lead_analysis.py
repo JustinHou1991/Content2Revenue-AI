@@ -354,61 +354,124 @@ class LeadAnalysisPage(AnalysisPage):
         st.session_state.lead_field_mapping = None
 
     def _display_result(self, result: dict):
-        """展示单个分析结果"""
+        """展示单个分析结果（优化版：层次分明）"""
         profile = result["profile"]
         lead_id = result["lead_id"]
+        raw = result.get("raw_data", {})
 
-        callout(f"分析完成！ID: {lead_id[:8]}...", type="success", icon="&#10003;")
+        # === 顶部：线索来源标识 ===
+        company = raw.get("company", raw.get("公司名称", ""))
+        name = raw.get("name", raw.get("联系人", ""))
+        source_label = f"{company}"
+        if name:
+            source_label += f" · {name}"
+        if not source_label:
+            source_label = f"线索 {lead_id[:8]}"
 
-        # 核心指标
+        st.markdown(f"### 📋 {source_label}")
+        st.caption(f"ID: {lead_id[:8]}... | 分析时间: {result.get('created_at', '未知')[:16]}")
+
+        # === 核心指标卡片（3个最重要的） ===
         col1, col2, col3 = st.columns(3)
         with col1:
+            score = profile.get('lead_score', 0)
+            score_color = "#10B981" if score >= 70 else "#F59E0B" if score >= 50 else "#EF4444"
             metric_card(
                 title="线索评分",
-                value=f"{profile.get('lead_score', 'N/A')}/100",
-                subtitle="线索质量综合评分",
+                value=f"{score}/100",
+                subtitle="综合质量评分",
                 icon="&#128200;",
-                border_color="#6366F1",
+                border_color=score_color,
             )
         with col2:
             metric_card(
                 title="线索等级",
-                value=profile.get("lead_grade", "N/A"),
-                subtitle="A(85+) / B+(70+) / B(55+) / C(40+) / D(<40)",
+                value=profile.get('lead_grade', 'N/A'),
+                subtitle="A(85+) B+(70+) B(55+) C(40+) D(<40)",
                 icon="&#127942;",
                 border_color="#10B981",
             )
         with col3:
+            intent = profile.get('intent_level', 0)
+            intent_color = "#10B981" if intent >= 7 else "#F59E0B" if intent >= 4 else "#EF4444"
             metric_card(
                 title="购买意向",
-                value=f"{profile.get('intent_level', 'N/A')}/10",
-                subtitle="购买意向度",
+                value=f"{intent}/10",
+                subtitle="高意向" if intent >= 7 else "中意向" if intent >= 4 else "低意向",
                 icon="&#128065;",
-                border_color="#F59E0B",
+                border_color=intent_color,
             )
 
         divider()
-        self._display_profile(profile)
 
-    def _display_profile(self, profile: dict):
-        """展示线索画像详情"""
-        render_lead_profile_details(profile)
+        # === 关键信息（2列布局） ===
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown("#### 🏢 基础画像")
+            info_items = [
+                ("行业", profile.get('industry', '未知')),
+                ("公司阶段", profile.get('company_stage', '未知')),
+                ("决策角色", profile.get('role', '未知')),
+                ("购买阶段", profile.get('buying_stage', '未知')),
+                ("紧迫程度", profile.get('urgency', '未知')),
+                ("预算准备", profile.get('budget_readiness', '未知')),
+            ]
+            for label, value in info_items:
+                st.write(f"**{label}**: {value}")
+
+        with col_right:
+            st.markdown("#### 💔 核心痛点")
+            pain_points = profile.get("pain_points", [])
+            if pain_points:
+                for pain in pain_points:
+                    st.write(f"- {pain}")
+            else:
+                st.write("暂无")
+
+            st.markdown("#### 📡 意向信号")
+            signals = profile.get("intent_signals", [])
+            if signals:
+                for signal in signals:
+                    st.write(f"- {signal}")
+            else:
+                st.write("暂无")
 
         divider()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            render_list_section("决策标准", profile.get("decision_criteria", []))
+        # === 策略建议（折叠） ===
+        with st.expander("💡 互动策略建议", expanded=False):
+            st.info(profile.get("engagement_strategy", "暂无建议"))
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.write(f"**推荐内容类型**: {profile.get('recommended_content_type', '未知')}")
+            with col_b:
+                st.write(f"**推荐CTA类型**: {profile.get('recommended_cta', '未知')}")
 
-        with col2:
-            render_list_section("异议风险", profile.get("objection_risks", []))
+        with st.expander("⚖️ 决策标准 & 异议风险", expanded=False):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                render_list_section("决策标准", profile.get("decision_criteria", []))
+            with col_b:
+                render_list_section("异议风险", profile.get("objection_risks", []))
 
-        divider()
+    def _display_profile_simple(self, profile: dict):
+        """展示线索画像（简化版，用于历史记录）"""
+        col_left, col_right = st.columns(2)
 
-        st.markdown("#### 互动策略建议")
-        st.info(profile.get("engagement_strategy", "暂无建议"))
-        st.write(f"推荐内容类型: **{profile.get('recommended_content_type', '未知')}**")
-        st.write(f"推荐CTA类型: **{profile.get('recommended_cta', '未知')}**")
+        with col_left:
+            st.markdown("**基础画像**")
+            st.write(f"行业: {profile.get('industry', '未知')}")
+            st.write(f"公司阶段: {profile.get('company_stage', '未知')}")
+            st.write(f"购买阶段: {profile.get('buying_stage', '未知')}")
+            st.write(f"紧迫程度: {profile.get('urgency', '未知')}")
+
+        with col_right:
+            st.markdown("**核心痛点**")
+            for pain in profile.get("pain_points", []):
+                st.write(f"- {pain}")
+            if not profile.get("pain_points"):
+                st.write("暂无")
 
     def _render_history(self):
         """展示历史记录"""
@@ -445,14 +508,30 @@ class LeadAnalysisPage(AnalysisPage):
 
             for record in records:
                 profile = record.get("profile_json", {})
-                score = profile.get("lead_score", "N/A")
+                score = profile.get("lead_score", 0)
                 grade = profile.get("lead_grade", "N/A")
                 industry = profile.get("industry", "未知")
                 raw = record.get("raw_data_json", {})
-                company = raw.get("company", raw.get("公司名称", "未知"))
+                company = raw.get("company", raw.get("公司名称", ""))
+                name = raw.get("name", raw.get("联系人", ""))
+                intent = profile.get("intent_level", 0)
 
-                with st.expander(f"{grade} | {score}/100 | {industry} | {company}"):
-                    self._display_profile(profile)
+                # 标题：等级 + 评分 + 公司 + 行业
+                title_parts = [f"{grade}级", f"{score}分"]
+                if company:
+                    title_parts.append(company)
+                if industry and industry != "未知":
+                    title_parts.append(industry)
+                title = " | ".join(title_parts)
+
+                # 颜色标识
+                grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
+
+                with st.expander(f"{grade_icon} {title}"):
+                    # 简要信息
+                    if name:
+                        st.write(f"**联系人**: {name}")
+                    self._display_profile_simple(profile)
 
             # 分页控制
             self._render_pagination(total_count, page_size, "lead_history")
