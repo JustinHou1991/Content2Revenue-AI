@@ -115,18 +115,25 @@ class ContentAnalysisPage(AnalysisPage):
 
             # 读取CSV或Excel并显示字段映射
             if st.session_state.content_df is None:
+                import io
                 file_type = uploaded_file.name.lower().split(".")[-1]
                 if file_type in ["xlsx", "xls"]:
                     st.session_state.content_df = pd.read_excel(uploaded_file)
                 else:
+                    # CSV文件：先将内容读入内存，再用BytesIO解析
+                    file_bytes = uploaded_file.getvalue()
+                    csv_file = io.BytesIO(file_bytes)
                     # 尝试多种编码读取CSV
-                    try:
-                        st.session_state.content_df = pd.read_csv(uploaded_file, encoding="utf-8")
-                    except UnicodeDecodeError:
+                    for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
                         try:
-                            st.session_state.content_df = pd.read_csv(uploaded_file, encoding="gbk")
+                            csv_file.seek(0)
+                            st.session_state.content_df = pd.read_csv(csv_file, encoding=encoding)
+                            break
                         except UnicodeDecodeError:
-                            st.session_state.content_df = pd.read_csv(uploaded_file, encoding="latin-1")
+                            continue
+                    else:
+                        st.error("无法识别CSV文件编码，请将文件保存为UTF-8格式后重试")
+                        return
 
             df = st.session_state.content_df
 
