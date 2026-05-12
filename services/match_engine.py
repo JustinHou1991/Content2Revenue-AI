@@ -3,7 +3,9 @@
 """
 
 import logging
+import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
@@ -258,22 +260,25 @@ class MatchEngine(BaseAnalyzer):
         contents: List[Dict[str, Any]],
         leads: List[Dict[str, Any]],
         top_k: int = 3,
+        max_workers: int = 3,
     ) -> List[Dict[str, Any]]:
-        """批量匹配：每个线索找到最合适的top_k个内容
+        """批量匹配：每个线索找到最合适的top_k个内容（并发优化版）
 
         Args:
             contents: ContentAnalyzer输出列表（每个含analysis字段，可选content_id字段）
             leads: LeadAnalyzer输出列表（每个含profile字段，可选lead_id和raw_data字段）
             top_k: 每个线索返回的匹配内容数量
+            max_workers: 并发线程数，默认3，避免LLM API限流
 
         Returns:
-            匹配结果列表
+            匹配结果列表（顺序与输入leads顺序一致）
         """
         logger.info(
-            "开始批量匹配: %d 条内容 x %d 条线索, top_k=%d",
+            "开始批量匹配: %d 条内容 x %d 条线索, top_k=%d, max_workers=%d",
             len(contents),
             len(leads),
             top_k,
+            max_workers,
         )
 
         if not contents:
@@ -283,52 +288,121 @@ class MatchEngine(BaseAnalyzer):
             logger.warning("线索列表为空，跳过批量匹配")
             return []
 
-        results: List[Dict[str, Any]] = []
-        for lead in leads:
+        # ---- 构建所有待匹配任务（带原始索引，保证结果顺序） ----
+        tasks: List[tuple] = []
+        for lead_idx, lead in enumerate(leads):
             lead_profile = lead.get("profile", lead)
             lead_id = lead.get("lead_id")
-            matches: List[Dict[str, Any]] = []
-
-            for content in contents:
+            for content_idx, content in enumerate(contents):
                 content_feature = content.get("analysis", content)
                 content_id = content.get("content_id")
-                try:
-                    result = self.match(
-                        content_feature,
-                        lead_profile,
-                        content_id=content_id,
-                        lead_id=lead_id,
-                    )
-                    matches.append(result)
-                except RuntimeError as e:
-                    logger.warning(
-                        "单对匹配失败 content_id=%s, lead_id=%s, error=%s",
-                        content_id,
-                        lead_id,
-                        e,
-                    )
-                    matches.append(
+                tasks.append((lead_idx, content_idx, content_feature, lead_profile, content_id, lead_id))
+
+        total_tasks = len(tasks)
+        logger.info("共生成 %d 个匹配任务，开始并发执行", total_tasks)
+
+        # ---- 并发执行所有匹配任务 ----
+        # 使用字典按 lead_idx 分组存储匹配结果，保证线程安全
+        matches_by_lead: Dict[int, List[Dict[str, Any]]] = {i: [] for i in range(len(leads))}
+        lock = threading.Lock()
+        completed_count = 0
+        error_count = 0
+        count_lock = threading.Lock()
+
+        def _do_match(
+            lead_idx: int,
+            content_idx: int,
+            content_feature: Dict[str, Any],
+            lead_profile: Dict[str, Any],
+            content_id: Optional[str],
+            lead_id: Optional[str],
+        ) -> None:
+            """执行单个匹配任务，结果写入共享字典"""
+            nonlocal completed_count, error_count
+            try:
+                result = self.match(
+                    content_feature,
+                    lead_profile,
+                    content_id=content_id,
+                    lead_id=lead_id,
+                )
+                with lock:
+                    matches_by_lead[lead_idx].append(result)
+            except RuntimeError as e:
+                with count_lock:
+                    error_count += 1
+                logger.warning(
+                    "单对匹配失败 content_id=%s, lead_id=%s, error=%s",
+                    content_id,
+                    lead_id,
+                    e,
+                )
+                with lock:
+                    matches_by_lead[lead_idx].append(
                         {
                             "error": str(e),
                             "content_id": content_id,
                             "lead_id": lead_id,
                         }
                     )
-                except Exception as e:
-                    logger.error(
-                        "单对匹配发生未预期异常 content_id=%s, lead_id=%s, error=%s",
-                        content_id,
-                        lead_id,
-                        e,
-                        exc_info=True,
-                    )
-                    matches.append(
+            except Exception as e:
+                with count_lock:
+                    error_count += 1
+                logger.error(
+                    "单对匹配发生未预期异常 content_id=%s, lead_id=%s, error=%s",
+                    content_id,
+                    lead_id,
+                    e,
+                    exc_info=True,
+                )
+                with lock:
+                    matches_by_lead[lead_idx].append(
                         {
                             "error": f"未预期错误: {str(e)}",
                             "content_id": content_id,
                             "lead_id": lead_id,
                         }
                     )
+            finally:
+                with count_lock:
+                    completed_count += 1
+                if completed_count % 10 == 0 or completed_count == total_tasks:
+                    logger.info(
+                        "匹配进度: %d/%d (成功: %d, 失败: %d)",
+                        completed_count,
+                        total_tasks,
+                        completed_count - error_count,
+                        error_count,
+                    )
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _do_match, lead_idx, content_idx, content_feature,
+                    lead_profile, content_id, lead_id,
+                )
+                for lead_idx, content_idx, content_feature, lead_profile, content_id, lead_id in tasks
+            ]
+            # 等待所有任务完成，捕获可能的取消异常
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error("线程池任务执行异常: %s", e, exc_info=True)
+
+        logger.info(
+            "所有匹配任务完成: 总计 %d, 成功 %d, 失败 %d",
+            total_tasks,
+            completed_count - error_count,
+            error_count,
+        )
+
+        # ---- 按线索聚合结果，保持与输入leads一致的顺序 ----
+        results: List[Dict[str, Any]] = []
+        for lead_idx, lead in enumerate(leads):
+            lead_profile = lead.get("profile", lead)
+            lead_id = lead.get("lead_id")
+            matches = matches_by_lead[lead_idx]
 
             # 按分数排序
             matches.sort(

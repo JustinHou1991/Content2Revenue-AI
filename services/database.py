@@ -15,6 +15,20 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# 尝试导入cryptography库，用于Fernet对称加密
+_FERNET_AVAILABLE = False
+try:
+    from cryptography.fernet import Fernet
+    _FERNET_AVAILABLE = True
+    logger.info("cryptography库可用，将使用Fernet对称加密")
+except ImportError:
+    logger.warning("cryptography库不可用，将回退到XOR加密方案")
+
+# Fernet密钥在数据库中的存储键名
+_FERNET_KEY_SETTING = "_fernet_encryption_key"
+# 用于标识数据是否为Fernet加密的前缀
+_FERNET_PREFIX = "FERNET:"
+
 # 所有需要JSON解析的字段名集合（跨所有表）
 _ALL_JSON_FIELDS = frozenset(
     {
@@ -55,6 +69,10 @@ class Database:
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
         self._init_tables()
+        # 初始化Fernet加密密钥（如果cryptography库可用）
+        self._fernet: Optional[Any] = None
+        if _FERNET_AVAILABLE:
+            self._init_fernet_key()
 
     @contextmanager
     def _get_conn(self):
@@ -81,28 +99,167 @@ class Database:
         # 注意：由于连接是临时的，这里使用线程局部存储
         pass  # 实际计时逻辑在 execute 中实现
 
-    def _encrypt_value(self, value: str) -> str:
-        """简单加密敏感值（XOR + 密钥派生）"""
+    def _init_fernet_key(self) -> None:
+        """
+        初始化或加载Fernet加密密钥。
+
+        密钥存储在数据库app_settings表中，如果不存在则自动生成。
+        """
+        try:
+            with self._get_conn() as conn:
+                row = conn.execute(
+                    "SELECT value FROM app_settings WHERE key = ?",
+                    (_FERNET_KEY_SETTING,),
+                ).fetchone()
+                if row and row["value"]:
+                    key_bytes = base64.b64decode(row["value"])
+                    self._fernet = Fernet(key_bytes)
+                    logger.info("已从数据库加载Fernet加密密钥")
+                else:
+                    # 生成新的Fernet密钥
+                    key_bytes = Fernet.generate_key()
+                    now = datetime.now().isoformat()
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO app_settings (key, value, updated_at)
+                        VALUES (?, ?, ?)
+                        """,
+                        (_FERNET_KEY_SETTING, key_bytes.decode(), now),
+                    )
+                    self._fernet = Fernet(key_bytes)
+                    logger.info("已生成新的Fernet加密密钥并存储到数据库")
+        except Exception as e:
+            logger.error("初始化Fernet密钥失败，将回退到XOR加密: %s", e)
+            self._fernet = None
+
+    def _xor_encrypt(self, value: str) -> str:
+        """XOR加密（降级方案，安全性较弱）"""
         if not value:
             return ""
-        key = hashlib.sha256(self.db_path.encode()).digest()  # 用数据库路径作为密钥源
+        key = hashlib.sha256(self.db_path.encode()).digest()
         key_bytes = key * (len(value) // len(key) + 1)
-        encrypted = bytes(a ^ b for a, b in zip(value.encode(), key_bytes[:len(value)]))
+        encrypted = bytes(a ^ b for a, b in zip(value.encode(), key_bytes[: len(value)]))
         return base64.b64encode(encrypted).decode()
 
-    def _decrypt_value(self, encrypted: str) -> str:
-        """解密敏感值"""
+    def _xor_decrypt(self, encrypted: str) -> str:
+        """XOR解密（降级方案）"""
         if not encrypted:
             return ""
         try:
             key = hashlib.sha256(self.db_path.encode()).digest()
             encrypted_bytes = base64.b64decode(encrypted)
             key_bytes = key * (len(encrypted_bytes) // len(key) + 1)
-            decrypted = bytes(a ^ b for a, b in zip(encrypted_bytes, key_bytes[:len(encrypted_bytes)]))
+            decrypted = bytes(
+                a ^ b for a, b in zip(encrypted_bytes, key_bytes[: len(encrypted_bytes)])
+            )
             return decrypted.decode()
         except Exception:
             # 如果解密失败，可能是因为旧数据是明文存储的
             return encrypted
+
+    def _encrypt_value(self, value: str) -> str:
+        """
+        加密敏感值（优先使用Fernet，不可用时降级到XOR）。
+
+        Fernet加密的数据会添加 'FERNET:' 前缀以便解密时识别。
+        """
+        if not value:
+            return ""
+        # 优先使用Fernet对称加密
+        if self._fernet is not None:
+            try:
+                encrypted = self._fernet.encrypt(value.encode())
+                return _FERNET_PREFIX + base64.b64encode(encrypted).decode()
+            except Exception as e:
+                logger.warning("Fernet加密失败，回退到XOR: %s", e)
+        # 降级到XOR加密
+        return self._xor_encrypt(value)
+
+    def _decrypt_value(self, encrypted: str) -> str:
+        """
+        解密敏感值（自动识别Fernet/XOR/明文）。
+
+        识别逻辑：
+        1. 如果有 'FERNET:' 前缀，使用Fernet解密
+        2. 否则尝试XOR解密
+        3. 如果都失败，返回原始值（兼容明文存储）
+        """
+        if not encrypted:
+            return ""
+        # 识别Fernet加密数据
+        if encrypted.startswith(_FERNET_PREFIX):
+            if self._fernet is not None:
+                try:
+                    encrypted_data = base64.b64decode(encrypted[len(_FERNET_PREFIX) :])
+                    return self._fernet.decrypt(encrypted_data).decode()
+                except Exception as e:
+                    logger.warning("Fernet解密失败: %s", e)
+            else:
+                logger.warning("检测到Fernet加密数据但Fernet不可用，无法解密")
+            return ""
+        # 尝试XOR解密（兼容旧数据）
+        xor_result = self._xor_decrypt(encrypted)
+        return xor_result
+
+    def _migrate_to_fernet(self) -> int:
+        """
+        将所有旧的XOR加密数据自动迁移为Fernet加密。
+
+        Returns:
+            成功迁移的记录数量
+        """
+        if self._fernet is None:
+            logger.info("Fernet不可用，跳过迁移")
+            return 0
+
+        migrated = 0
+        try:
+            with self._get_conn() as conn:
+                # 查找所有非Fernet加密的API_KEY记录
+                rows = conn.execute(
+                    "SELECT key, value FROM app_settings WHERE key = 'API_KEY' AND value IS NOT NULL AND value != ''"
+                ).fetchall()
+
+                for row in rows:
+                    raw_value = row["value"]
+                    # 跳过已经是Fernet加密的数据
+                    if raw_value.startswith(_FERNET_PREFIX):
+                        continue
+
+                    # 尝试用XOR解密旧数据
+                    decrypted = self._xor_decrypt(raw_value)
+                    if decrypted and decrypted != raw_value:
+                        # 解密成功，用Fernet重新加密
+                        new_encrypted = self._encrypt_value(decrypted)
+                        now = datetime.now().isoformat()
+                        conn.execute(
+                            """
+                            UPDATE app_settings SET value = ?, updated_at = ?
+                            WHERE key = ?
+                            """,
+                            (new_encrypted, now, row["key"]),
+                        )
+                        migrated += 1
+                        logger.info("已迁移加密数据: key=%s", row["key"])
+                    else:
+                        # 可能是明文数据，也用Fernet加密保护
+                        new_encrypted = self._encrypt_value(raw_value)
+                        now = datetime.now().isoformat()
+                        conn.execute(
+                            """
+                            UPDATE app_settings SET value = ?, updated_at = ?
+                            WHERE key = ?
+                            """,
+                            (new_encrypted, now, row["key"]),
+                        )
+                        migrated += 1
+                        logger.info("已将明文数据升级为Fernet加密: key=%s", row["key"])
+        except Exception as e:
+            logger.error("加密数据迁移失败: %s", e)
+
+        if migrated > 0:
+            logger.info("加密迁移完成，共迁移 %d 条记录", migrated)
+        return migrated
 
     def _init_tables(self) -> None:
         """初始化数据库表"""
@@ -685,6 +842,15 @@ class Database:
             value = row["value"] if row else default
             # API_KEY 需要解密后返回
             if key == "API_KEY" and value:
+                # 检测到旧的XOR加密数据，自动迁移为Fernet加密
+                if self._fernet is not None and not value.startswith(_FERNET_PREFIX):
+                    logger.info("检测到旧的加密格式，自动迁移API_KEY为Fernet加密")
+                    self._migrate_to_fernet()
+                    # 重新读取迁移后的值
+                    row = conn.execute(
+                        "SELECT value FROM app_settings WHERE key = ?", (key,)
+                    ).fetchone()
+                    value = row["value"] if row else default
                 value = self._decrypt_value(value)
             return value
 

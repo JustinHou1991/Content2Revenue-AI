@@ -4,9 +4,10 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-red.svg)](https://streamlit.io)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-221%20|%2095%25%20Coverage-brightgreen.svg)](#测试)
 [![Code Style](https://img.shields.io/badge/Code%20Style-flake8-blue.svg)](#代码规范)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](DEPLOYMENT.md)
 
 ---
 
@@ -74,29 +75,38 @@
 
 ## 🚀 快速开始
 
-### 1. 安装依赖
+### 方式一：Docker部署（推荐，3分钟启动）
 
 ```bash
+# 1. 克隆仓库
+git clone https://github.com/yourusername/content2revenue.git
+cd content2revenue
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，填入你的API Key
+
+# 3. 启动服务
+docker-compose up -d
+
+# 4. 访问应用
+# 打开浏览器访问 http://localhost:8501
+```
+
+详细部署指南请查看 [DEPLOYMENT.md](DEPLOYMENT.md)
+
+### 方式二：本地开发环境
+
+```bash
+# 1. 安装依赖
 pip install -r requirements.txt
-```
 
-### 2. 配置API Key
-
-**方式一：环境变量**
-```bash
-# DeepSeek（推荐，性价比最高）
+# 2. 配置API Key
 export DEEPSEEK_API_KEY="sk-your-key"
-
-# 或 通义千问
+# 或
 export DASHSCOPE_API_KEY="sk-your-key"
-```
 
-**方式二：在应用内配置**
-启动应用后，进入「系统设置」页面配置。
-
-### 3. 启动应用
-
-```bash
+# 3. 启动应用
 streamlit run app.py
 ```
 
@@ -358,7 +368,42 @@ content2revenue/
 
 ## 📄 License
 
-MIT License
+Business Source License 1.1 (BSL 1.1)
+
+本项目采用 BSL 1.1 许可证，允许个人学习、内部使用和学术研究，商业使用需获得授权。
+
+- **允许**: 个人学习、内部使用、学术研究、贡献代码
+- **限制**: 不得将本项目作为SaaS服务提供给第三方、不得嵌入竞争产品转售
+- **4年后**: 自动转为 Apache 2.0 许可证
+
+详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 💼 商业化与部署
+
+### 企业级特性
+
+| 特性 | 状态 | 说明 |
+|------|------|------|
+| Docker部署 | ✅ 已支持 | 一键启动，含生产/开发环境 |
+| 用户认证 | ✅ 已支持 | JWT认证，RBAC权限控制 |
+| 多租户 | 🚧 规划中 | 数据隔离，支持SaaS模式 |
+| PostgreSQL | 🚧 规划中 | 高性能数据库支持 |
+| API开放平台 | 🚧 规划中 | RESTful API，Webhook支持 |
+| 前端重构 | 🚧 规划中 | Next.js + React |
+
+### 部署文档
+
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Docker部署指南
+- [docs/DATABASE_MIGRATION_PLAN.md](docs/DATABASE_MIGRATION_PLAN.md) - 数据库迁移方案
+- [docs/FRONTEND_REFACTOR_PLAN.md](docs/FRONTEND_REFACTOR_PLAN.md) - 前端重构计划
+- [docs/COMMERCIAL_FEASIBILITY_REPORT.md](docs/COMMERCIAL_FEASIBILITY_REPORT.md) - 商业化可行性分析
+
+### 商业授权
+
+如需商业授权、定制开发或技术支持，请联系：
+- Email: justinhou@example.com
 
 ---
 

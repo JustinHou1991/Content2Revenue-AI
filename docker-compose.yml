@@ -1,0 +1,132 @@
+# Content2Revenue AI - Docker Compose配置
+# 一键启动完整应用栈
+# 作者: AI Assistant
+# 日期: 2026-05-10
+
+version: '3.8'
+
+services:
+  # ============================================
+  # 主应用服务
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: content2revenue-app
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - DATABASE_PATH=/app/data/content2revenue.db
+      - BACKUP_DIR=/app/backups
+      - LOG_DIR=/app/logs
+      # API配置（用户需自行配置）
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TONGYI_API_KEY=${TONGYI_API_KEY:-}
+    volumes:
+      # 数据持久化
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+      # 配置文件
+      - ./config:/app/config:ro
+    networks:
+      - content2revenue-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # 开发环境服务（可选）
+  # ============================================
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: content2revenue-dev
+    profiles:
+      - dev
+    ports:
+      - "8502:8501"
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - DATABASE_PATH=/app/data/content2revenue_dev.db
+    volumes:
+      # 开发模式：挂载源代码支持热重载
+      - .:/app
+      - /app/__pycache__
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - content2revenue-network
+    command: ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.runOnSave=true"]
+
+  # ============================================
+  # Nginx反向代理（生产环境推荐）
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: content2revenue-nginx
+    restart: unless-stopped
+    profiles:
+      - production
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - content2revenue-network
+
+  # ============================================
+  # 定时备份服务
+  # ============================================
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: content2revenue-backup
+    restart: unless-stopped
+    profiles:
+      - backup
+    environment:
+      - DATABASE_PATH=/app/data/content2revenue.db
+      - BACKUP_DIR=/app/backups
+      - BACKUP_RETENTION_DAYS=30
+    volumes:
+      - ./data:/app/data:ro
+      - ./backups:/app/backups
+    command: >
+      sh -c "
+        echo '0 2 * * * cd /app && python -c \"from core.backup_manager import BackupManager; bm = BackupManager(\"/app/backups\"); bm.create_backup(\"/app/data/content2revenue.db\")\"' | crontab - &&
+        crond -f
+      "
+    networks:
+      - content2revenue-network
+
+networks:
+  content2revenue-network:
+    driver: bridge
+
+volumes:
+  data:
+    driver: local
+  logs:
+    driver: local
+  backups:
+    driver: local

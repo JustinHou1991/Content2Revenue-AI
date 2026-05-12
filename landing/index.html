@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content2Revenue AI - AI驱动的内容变现智能平台</title>
+    <meta name="description" content="通过AI分析抖音内容与销售线索的语义匹配，帮助内容团队精准获客，提升转化率">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Header */
+        header {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            list-style: none;
+        }
+        
+        .nav-links a {
+            text-decoration: none;
+            color: #555;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: #667eea;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        /* Hero Section */
+        .hero {
+            padding: 150px 0 100px;
+            text-align: center;
+            color: white;
+        }
+        
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+        
+        .hero p {
+            font-size: 22px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .hero-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn-large {
+            padding: 16px 40px;
+            font-size: 18px;
+        }
+        
+        /* Features Section */
+        .features {
+            background: white;
+            padding: 100px 0;
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        
+        .section-title h2 {
+            font-size: 42px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .section-title p {
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+        
+        .feature-card {
+            background: #f8f9ff;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.15);
+        }
+        
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 25px;
+            font-size: 36px;
+        }
+        
+        .feature-card h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .feature-card p {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        /* How It Works */
+        .how-it-works {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 100px 0;
+        }
+        
+        .steps {
+            display: flex;
+            justify-content: space-between;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .step {
+            flex: 1;
+            min-width: 250px;
+            text-align: center;
+            padding: 30px;
+        }
+        
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 auto 20px;
+        }
+        
+        .step h3 {
+            font-size: 22px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .step p {
+            color: #666;
+        }
+        
+        /* Pricing */
+        .pricing {
+            background: white;
+            padding: 100px 0;
+        }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        
+        .pricing-card {
+            background: #f8f9ff;
+            padding: 50px 40px;
+            border-radius: 20px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .pricing-card.featured {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .pricing-card.featured h3,
+        .pricing-card.featured .price,
+        .pricing-card.featured ul li {
+            color: white;
+        }
+        
+        .pricing-card h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .price {
+            font-size: 48px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 30px;
+        }
+        
+        .price span {
+            font-size: 16px;
+            color: #999;
+        }
+        
+        .pricing-card ul {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+        
+        .pricing-card ul li {
+            padding: 10px 0;
+            color: #666;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .badge {
+            position: absolute;
+            top: -10px;
+            right: 20px;
+            background: #ff6b6b;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        /* CTA Section */
+        .cta {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 100px 0;
+            text-align: center;
+            color: white;
+        }
+        
+        .cta h2 {
+            font-size: 42px;
+            margin-bottom: 20px;
+        }
+        
+        .cta p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+        
+        /* Footer */
+        footer {
+            background: #1a1a2e;
+            color: white;
+            padding: 60px 0 30px;
+        }
+        
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .footer-section h4 {
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+        
+        .footer-section ul {
+            list-style: none;
+        }
+        
+        .footer-section ul li {
+            margin-bottom: 10px;
+        }
+        
+        .footer-section a {
+            color: #aaa;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        
+        .footer-section a:hover {
+            color: white;
+        }
+        
+        .footer-bottom {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid #333;
+            color: #666;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 36px;
+            }
+            
+            .hero p {
+                font-size: 18px;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .pricing-card.featured {
+                transform: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <nav class="container">
+            <div class="logo">Content2Revenue AI</div>
+            <ul class="nav-links">
+                <li><a href="#features">功能</a></li>
+                <li><a href="#how-it-works">流程</a></li>
+                <li><a href="#pricing">定价</a></li>
+                <li><a href="#docs">文档</a></li>
+            </ul>
+            <a href="http://localhost:8501" class="btn btn-primary">免费试用</a>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>让内容自动带来收入</h1>
+            <p>AI驱动的内容-商业转化智能平台。分析抖音内容特征，匹配高价值销售线索，生成数据驱动的内容策略。</p>
+            <div class="hero-buttons">
+                <a href="http://localhost:8501" class="btn btn-primary btn-large">🚀 免费开始试用</a>
+                <a href="https://github.com/yourusername/content2revenue" class="btn btn-secondary btn-large">📂 查看GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-title">
+                <h2>核心功能</h2>
+                <p>从内容创作到商业转化的完整闭环</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <h3>内容智能分析</h3>
+                    <p>自动提取抖音脚本的Hook类型、情感基调、叙事结构、CTA等15+个特征，量化内容质量</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">👤</div>
+                    <h3>线索画像构建</h3>
+                    <p>深度分析销售线索，构建客户画像：行业、痛点、购买阶段、意向度评分</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>语义匹配引擎</h3>
+                    <p>市面独有的内容-线索语义匹配，5维度评估适配度，精准推荐高转化内容</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💡</div>
+                    <h3>AI策略顾问</h3>
+                    <p>基于匹配结果生成内容策略、分发建议、转化预测和A/B测试方案</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>成本精细追踪</h3>
+                    <p>实时监控API调用成本，提供优化建议，让每一分投入都清晰可见</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>企业级安全</h3>
+                    <p>JWT认证、RBAC权限控制、审计日志、数据加密，满足企业合规要求</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-title">
+                <h2>使用流程</h2>
+                <p>四步实现内容到收入的转化</p>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>上传内容</h3>
+                    <p>导入抖音脚本或销售线索数据，支持CSV批量上传</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>AI分析</h3>
+                    <p>系统自动提取内容特征，构建客户画像</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>智能匹配</h3>
+                    <p>语义匹配引擎推荐最佳内容-线索组合</p>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3>生成策略</h3>
+                    <p>获取AI生成的内容策略和转化预测</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing" id="pricing">
+        <div class="container">
+            <div class="section-title">
+                <h2>定价方案</h2>
+                <p>选择适合你的方案，随时升级或降级</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>免费版</h3>
+                    <div class="price">¥0<span>/月</span></div>
+                    <ul>
+                        <li>每月50次内容分析</li>
+                        <li>每月50条线索分析</li>
+                        <li>基础匹配功能</li>
+                        <li>社区支持</li>
+                    </ul>
+                    <a href="http://localhost:8501" class="btn btn-secondary">免费开始</a>
+                </div>
+                <div class="pricing-card featured">
+                    <span class="badge">推荐</span>
+                    <h3>专业版</h3>
+                    <div class="price">¥299<span>/月</span></div>
+                    <ul>
+                        <li>无限内容分析</li>
+                        <li>无限线索分析</li>
+                        <li>高级语义匹配</li>
+                        <li>AI策略顾问</li>
+                        <li>A/B测试框架</li>
+                        <li>优先技术支持</li>
+                    </ul>
+                    <a href="mailto:justinhou@example.com" class="btn btn-primary">立即升级</a>
+                </div>
+                <div class="pricing-card">
+                    <h3>企业版</h3>
+                    <div class="price">定制</div>
+                    <ul>
+                        <li>所有专业版功能</li>
+                        <li>多租户支持</li>
+                        <li>私有化部署</li>
+                        <li>SSO集成</li>
+                        <li>专属客户经理</li>
+                        <li>SLA保障</li>
+                    </ul>
+                    <a href="mailto:justinhou@example.com" class="btn btn-secondary">联系销售</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="container">
+            <h2>准备好让内容为你赚钱了吗？</h2>
+            <p>立即开始免费试用，体验AI驱动的内容变现</p>
+            <a href="http://localhost:8501" class="btn btn-primary btn-large">🚀 免费开始试用</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>产品</h4>
+                    <ul>
+                        <li><a href="#features">功能特性</a></li>
+                        <li><a href="#pricing">定价方案</a></li>
+                        <li><a href="#">更新日志</a></li>
+                        <li><a href="#">路线图</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>资源</h4>
+                    <ul>
+                        <li><a href="DEPLOYMENT.md">部署文档</a></li>
+                        <li><a href="docs/">开发文档</a></li>
+                        <li><a href="#">API文档</a></li>
+                        <li><a href="#">最佳实践</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>社区</h4>
+                    <ul>
+                        <li><a href="https://github.com/yourusername/content2revenue">GitHub</a></li>
+                        <li><a href="#">技术博客</a></li>
+                        <li><a href="#">用户案例</a></li>
+                        <li><a href="#">联系我们</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>法律</h4>
+                    <ul>
+                        <li><a href="LICENSE">许可证</a></li>
+                        <li><a href="#">隐私政策</a></li>
+                        <li><a href="#">服务条款</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Content2Revenue AI. All rights reserved. | Licensed under BSL 1.1</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

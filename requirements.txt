@@ -15,8 +15,23 @@ reportlab>=4.0.0
 pyyaml>=6.0
 cryptography>=41.0
 
+# 认证系统依赖
+pyjwt>=2.8.0
+bcrypt>=4.1.0
+
+# API平台依赖
+fastapi>=0.110.0
+uvicorn>=0.27.0
+python-multipart>=0.0.9
+
+# 数据库依赖
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+psycopg2-binary>=2.9.0
+
 # 代码质量工具
 black>=24.0.0
 flake8>=7.0.0
 mypy>=1.9.0
 pytest>=7.0.0
+pytest-asyncio>=0.23.0

@@ -4,9 +4,11 @@
 基于历史数据的简单规则评分，无需训练ML模型，减少LLM调用。
 """
 
+import copy
 import logging
+import time
 from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from services.database import Database
 
@@ -36,6 +38,20 @@ class ScoreResult:
     confidence: float
     factors: List[str]
     recommendations: List[str]
+
+
+@dataclass
+class FeedbackRecord:
+    """反馈调整记录"""
+
+    timestamp: float
+    dimension: str          # 调整维度（hook/cta/structure/emotion）
+    key: str                # 具体类型键（如"痛点反问型"）
+    old_score: float        # 调整前分数
+    new_score: float        # 调整后分数
+    predicted: float        # 预测转化率
+    actual: float           # 实际转化率
+    reason: str             # 调整原因
 
 
 class ContentScoringModel:
@@ -93,6 +109,13 @@ class ContentScoringModel:
     LENGTH_MIN = 100
     LENGTH_MAX = 2000
 
+    # 反馈学习参数
+    LEARNING_RATE = 0.05          # 梯度调整步长
+    MIN_SCORE = 0.30              # 最低分数下限
+    MAX_SCORE = 0.98              # 最高分数上限
+    MIN_FEEDBACK_COUNT = 5        # 最少反馈样本数
+    MAX_ADJUSTMENT_HISTORY = 200  # 最大调整历史记录数
+
     def __init__(self, db: Optional[Database] = None):
         """
         初始化评分模型
@@ -101,6 +124,16 @@ class ContentScoringModel:
             db: 数据库实例，用于获取历史数据
         """
         self.db = db or Database()
+
+        # 运行时评分基准（深拷贝类常量，避免污染全局默认值）
+        self._hook_scores: Dict[str, float] = copy.deepcopy(self.HOOK_TYPE_SCORES)
+        self._cta_scores: Dict[str, float] = copy.deepcopy(self.CTA_TYPE_SCORES)
+        self._emotion_scores: Dict[str, float] = copy.deepcopy(self.EMOTION_SCORES)
+        self._structure_scores: Dict[str, float] = copy.deepcopy(self.STRUCTURE_SCORES)
+
+        # 反馈调整历史记录
+        self._adjustment_history: List[FeedbackRecord] = []
+
         self._load_historical_data()
 
     def _load_historical_data(self) -> None:
@@ -131,7 +164,7 @@ class ContentScoringModel:
         if not hook_type:
             return 0.5, ["未识别Hook类型"]
 
-        base_score = self.HOOK_TYPE_SCORES.get(hook_type, 0.70)
+        base_score = self._hook_scores.get(hook_type, 0.70)
         factors.append(f"Hook类型 '{hook_type}' 基准分: {base_score:.2f}")
 
         return base_score, factors
@@ -148,7 +181,7 @@ class ContentScoringModel:
         if not cta_type:
             return 0.5, ["未识别CTA类型"]
 
-        base_score = self.CTA_TYPE_SCORES.get(cta_type, 0.70)
+        base_score = self._cta_scores.get(cta_type, 0.70)
         factors.append(f"CTA类型 '{cta_type}' 基准分: {base_score:.2f}")
 
         return base_score, factors
@@ -167,7 +200,7 @@ class ContentScoringModel:
 
         # 结构类型评分
         if structure_type:
-            structure_score = self.STRUCTURE_SCORES.get(structure_type, 0.65)
+            structure_score = self._structure_scores.get(structure_type, 0.65)
             score = structure_score
             factors.append(f"结构类型 '{structure_type}': {structure_score:.2f}")
         else:
@@ -233,7 +266,7 @@ class ContentScoringModel:
 
         scores = []
         for emotion in emotions:
-            score = self.EMOTION_SCORES.get(emotion, 0.70)
+            score = self._emotion_scores.get(emotion, 0.70)
             scores.append(score)
             factors.append(f"情感 '{emotion}': {score:.2f}")
 
@@ -477,25 +510,157 @@ class ContentScoringModel:
         """
         根据反馈数据更新评分基准
 
+        从数据库获取策略效果数据，对比实际转化率与预测转化率，
+        使用梯度调整逻辑更新各维度的评分权重：
+        - 如果预测偏高（实际 < 预测），则降低对应维度权重
+        - 如果预测偏低（实际 > 预测），则提高对应维度权重
+
+        调整幅度 = learning_rate * (actual - predicted) / predicted
+        调整后的分数会被限制在 [MIN_SCORE, MAX_SCORE] 范围内。
+
         Returns:
             是否更新成功
         """
         try:
             effectiveness = self.db.get_strategy_effectiveness(days=30)
 
-            if effectiveness.get("total_feedback", 0) < 5:
-                logger.warning("反馈数据不足，无法更新评分")
+            if effectiveness.get("total_feedback", 0) < self.MIN_FEEDBACK_COUNT:
+                logger.warning(
+                    "反馈数据不足（%d < %d），无法更新评分",
+                    effectiveness.get("total_feedback", 0),
+                    self.MIN_FEEDBACK_COUNT,
+                )
                 return False
 
-            # 这里可以实现基于反馈的动态评分调整
-            # 例如：如果某Hook类型的实际转化率与预期差异大，调整其基准分
+            # 获取各维度的策略效果明细
+            strategy_details = effectiveness.get("strategies", [])
+            if not strategy_details:
+                logger.warning("无策略明细数据，无法更新评分")
+                return False
 
-            logger.info("评分基准更新完成")
-            return True
+            total_adjustments = 0
+
+            for detail in strategy_details:
+                strategy_type = detail.get("strategy_type", "")
+                strategy_name = detail.get("strategy_name", "")
+                predicted_rate = detail.get("predicted_conversion", 0) / 100
+                actual_rate = detail.get("actual_conversion", 0) / 100
+                sample_count = detail.get("sample_count", 0)
+
+                # 跳过样本不足或数据缺失的条目
+                if sample_count < 3 or predicted_rate <= 0:
+                    continue
+
+                # 计算梯度调整量
+                error = actual_rate - predicted_rate
+                relative_error = error / predicted_rate
+                adjustment = self.LEARNING_RATE * relative_error
+
+                # 根据策略类型映射到对应评分字典
+                score_dict, dimension = self._get_score_dict_by_strategy(strategy_type)
+                if score_dict is None or strategy_name not in score_dict:
+                    continue
+
+                old_score = score_dict[strategy_name]
+                new_score = old_score + adjustment
+
+                # 限制分数范围
+                new_score = max(self.MIN_SCORE, min(self.MAX_SCORE, new_score))
+
+                # 跳过微调（变化过小无意义）
+                if abs(new_score - old_score) < 0.001:
+                    continue
+
+                # 应用调整
+                score_dict[strategy_name] = round(new_score, 4)
+                total_adjustments += 1
+
+                # 记录调整历史
+                record = FeedbackRecord(
+                    timestamp=time.time(),
+                    dimension=dimension,
+                    key=strategy_name,
+                    old_score=round(old_score, 4),
+                    new_score=round(new_score, 4),
+                    predicted=round(predicted_rate, 4),
+                    actual=round(actual_rate, 4),
+                    reason=(
+                        f"预测={predicted_rate:.2%}, 实际={actual_rate:.2%}, "
+                        f"误差={relative_error:+.2%}, 调整={adjustment:+.4f}"
+                    ),
+                )
+                self._adjustment_history.append(record)
+
+            # 限制历史记录数量
+            if len(self._adjustment_history) > self.MAX_ADJUSTMENT_HISTORY:
+                self._adjustment_history = self._adjustment_history[
+                    -self.MAX_ADJUSTMENT_HISTORY :
+                ]
+
+            logger.info(
+                "评分基准更新完成: 共调整 %d 项, 历史记录 %d 条",
+                total_adjustments,
+                len(self._adjustment_history),
+            )
+            return total_adjustments > 0
 
         except Exception as e:
             logger.error("更新评分基准失败: %s", e)
             return False
+
+    def _get_score_dict_by_strategy(
+        self, strategy_type: str
+    ) -> Tuple[Optional[Dict[str, float]], str]:
+        """
+        根据策略类型获取对应的评分字典和维度名称
+
+        Args:
+            strategy_type: 策略类型字符串
+
+        Returns:
+            (评分字典引用, 维度名称) 的元组；如果不匹配则返回 (None, "")
+        """
+        mapping = {
+            "hook": (self._hook_scores, "hook"),
+            "cta": (self._cta_scores, "cta"),
+            "emotion": (self._emotion_scores, "emotion"),
+            "structure": (self._structure_scores, "structure"),
+        }
+        return mapping.get(strategy_type, (None, ""))
+
+    def get_adjustment_history(self) -> List[Dict[str, Any]]:
+        """
+        获取反馈调整历史记录
+
+        Returns:
+            调整历史字典列表（按时间倒序）
+        """
+        return [
+            {
+                "timestamp": r.timestamp,
+                "dimension": r.dimension,
+                "key": r.key,
+                "old_score": r.old_score,
+                "new_score": r.new_score,
+                "predicted": r.predicted,
+                "actual": r.actual,
+                "reason": r.reason,
+            }
+            for r in reversed(self._adjustment_history)
+        ]
+
+    def reset_scores_to_defaults(self) -> None:
+        """
+        重置所有评分基准为类默认值
+
+        同时清空调整历史记录。
+        """
+        self._hook_scores = copy.deepcopy(self.HOOK_TYPE_SCORES)
+        self._cta_scores = copy.deepcopy(self.CTA_TYPE_SCORES)
+        self._emotion_scores = copy.deepcopy(self.EMOTION_SCORES)
+        self._structure_scores = copy.deepcopy(self.STRUCTURE_SCORES)
+        self._adjustment_history.clear()
+        logger.info("评分基准已重置为默认值")
 
 
 # ===== 便捷函数 =====
