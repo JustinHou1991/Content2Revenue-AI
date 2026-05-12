@@ -10,39 +10,7 @@ import sys
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# 初始化统一日志系统（尽早执行，确保所有后续模块都能使用）
-from utils.logger import setup_logging, get_logger
-from config import get_config
-from services.health_check import HealthChecker
-
-# 初始化健康检查器
-health_checker = HealthChecker()
-
-try:
-    # 尝试从 config 获取日志配置；如果 Streamlit secrets 尚不可用则使用默认值
-    _cfg_log_level = os.environ.get("C2R_LOG_LEVEL", "INFO")
-    _cfg_log_dir = os.environ.get("C2R_LOG_DIR", "data/logs")
-    setup_logging(level=_cfg_log_level, log_dir=_cfg_log_dir)
-except Exception:
-    setup_logging()  # 回退到默认配置
-
-logger = get_logger(__name__)
-
-
-def _safe_error_message(error: Exception) -> str:
-    """将内部错误转换为用户友好的消息"""
-    error_str = str(error)
-    # 常见错误类型的友好消息
-    if "401" in error_str or "Authentication" in error_str:
-        return "API Key 无效或已过期，请在设置页面重新配置"
-    if "timeout" in error_str.lower():
-        return "请求超时，请检查网络连接或稍后重试"
-    if "rate" in error_str.lower():
-        return "API 调用频率超限，请稍后重试"
-    # 默认消息，不暴露内部细节
-    return "操作失败，请稍后重试或查看日志获取详情"
-
-# 页面配置
+# 页面配置 — 必须是第一个 Streamlit 命令
 st.set_page_config(
     page_title="Content2Revenue AI",
     page_icon="📊",
@@ -50,19 +18,41 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# 注入新设计系统样式
-from ui.styles import inject_styles
-inject_styles()
+# 初始化统一日志系统
+from utils.logger import setup_logging, get_logger
+
+try:
+    _cfg_log_level = os.environ.get("C2R_LOG_LEVEL", "INFO")
+    _cfg_log_dir = os.environ.get("C2R_LOG_DIR", "data/logs")
+    setup_logging(level=_cfg_log_level, log_dir=_cfg_log_dir)
+except Exception:
+    setup_logging()
+
+logger = get_logger(__name__)
 
 # 初始化session state
 if "orchestrator" not in st.session_state:
     st.session_state.orchestrator = None
 if "initialized" not in st.session_state:
     st.session_state.initialized = False
+if "page" not in st.session_state:
+    st.session_state.page = "dashboard"
+
+
+def _safe_error_message(error: Exception) -> str:
+    """将内部错误转换为用户友好的消息"""
+    error_str = str(error)
+    if "401" in error_str or "Authentication" in error_str:
+        return "API Key 无效或已过期，请在设置页面重新配置"
+    if "timeout" in error_str.lower():
+        return "请求超时，请检查网络连接或稍后重试"
+    if "rate" in error_str.lower():
+        return "API 调用频率超限，请稍后重试"
+    return "操作失败，请稍后重试或查看日志获取详情"
 
 
 def _get_db_settings():
-    """从数据库 app_settings 表读取配置（持久化）"""
+    """从数据库 app_settings 表读取配置"""
     try:
         from services.database import Database
         db = Database()
@@ -76,13 +66,7 @@ def _get_db_settings():
 
 
 def init_orchestrator():
-    """延迟初始化编排器（避免每次交互都初始化）
-
-    配置读取优先级：
-    1. st.secrets（.streamlit/secrets.toml，部署环境）
-    2. 环境变量（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY）
-    3. 数据库 app_settings 表（UI设置页面保存的配置）
-    """
+    """延迟初始化编排器"""
     if st.session_state.orchestrator is not None:
         return True
 
@@ -92,11 +76,9 @@ def init_orchestrator():
         model = st.secrets.get("MODEL", "deepseek-chat")
         api_key = st.secrets.get("API_KEY", None)
 
-        # 如果 secrets 没有配置，尝试环境变量
         if not api_key:
             api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("DASHSCOPE_API_KEY")
 
-        # 如果环境变量也没有，尝试从数据库读取（UI设置页面持久化的配置）
         if not api_key:
             db_model, db_api_key = _get_db_settings()
             if db_api_key:
@@ -106,149 +88,70 @@ def init_orchestrator():
 
         if not api_key:
             st.session_state.initialized = False
-            logger.info("未找到API Key配置，等待用户在设置页面配置")
             return False
 
-        st.session_state.orchestrator = Orchestrator(
-            model=model,
-            api_key=api_key,
-        )
+        st.session_state.orchestrator = Orchestrator(model=model, api_key=api_key)
         st.session_state.initialized = True
         logger.info("Orchestrator 初始化成功: model=%s", model)
         return True
     except Exception as e:
         logger.error("初始化 Orchestrator 失败: %s", e, exc_info=True)
-        st.error(f"初始化失败: {_safe_error_message(e)}")
         st.session_state.initialized = False
         return False
 
 
 def main():
     """主入口"""
-    # 检查初始化
-    if not st.session_state.initialized:
-        init_orchestrator()
 
-    # 定义页面映射（在sidebar外部定义，确保可访问）
-    nav_key_to_page = {
-        "dashboard": "📊 仪表盘",
-        "content": "📝 内容分析",
-        "lead": "👤 线索分析",
-        "match": "🎯 匹配中心",
-        "strategy": "💡 策略建议",
-        "cost": "💰 成本分析",
-        "settings": "⚙️ 系统设置",
-    }
-
-    current_page_map = {
-        "📊 仪表盘": "dashboard",
-        "📝 内容分析": "content",
-        "👤 线索分析": "lead",
-        "🎯 匹配中心": "match",
-        "💡 策略建议": "strategy",
-        "💰 成本分析": "cost",
-        "⚙️ 系统设置": "settings",
-    }
-
-    # 检查是否有导航目标（从其他页面跳转过来）
-    nav_target = st.session_state.pop("nav_target", None)
-    if nav_target and nav_target in nav_key_to_page:
-        st.session_state.page = nav_target
-
-    # 获取当前页面，确保有默认值
-    current_page_key = st.session_state.get("page", "dashboard")
-    if current_page_key not in nav_key_to_page:
-        current_page_key = "dashboard"
-        st.session_state.page = current_page_key
-
-    # 侧边栏导航
+    # ============ 侧边栏（最先渲染，确保不被后续代码影响） ============
     with st.sidebar:
-        # Logo
-        try:
-            from ui.components.design_system import sidebar_logo
-            sidebar_logo(name="Content2Revenue", subtitle="AI")
-        except Exception as e:
-            st.markdown("### Content2Revenue AI")
-            logger.warning(f"Logo加载失败: {e}")
-
-        st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
+        st.markdown("## Content2Revenue AI")
+        st.markdown("---")
 
         # 导航菜单
-        nav_labels = list(nav_key_to_page.values())
-        try:
-            default_index = list(nav_key_to_page.keys()).index(current_page_key)
-        except ValueError:
-            default_index = 0
-
-        # 使用 radio 作为导航
-        selected_label = st.radio(
-            "导航",
-            nav_labels,
+        page = st.radio(
+            "导航菜单",
+            ["📊 仪表盘", "📝 内容分析", "👤 线索分析",
+             "🎯 匹配中心", "💡 策略建议", "💰 成本分析", "⚙️ 系统设置"],
             label_visibility="collapsed",
-            index=default_index,
+            index=0,
         )
 
-        # 同步回 session_state
-        if selected_label in current_page_map:
-            st.session_state.page = current_page_map[selected_label]
-
-        st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
+        st.markdown("---")
 
         # 系统状态
         if st.session_state.initialized:
             st.success("✅ 系统已连接")
-            try:
-                stats = st.session_state.orchestrator.get_dashboard_data()["stats"]
-                st.metric("已分析内容", stats.get("content_count", 0))
-                st.metric("已分析线索", stats.get("lead_count", 0))
-                st.metric("匹配次数", stats.get("match_count", 0))
-            except Exception as e:
-                st.info("📊 统计数据加载中...")
-                logger.warning("侧边栏统计数据加载失败: %s", e)
         else:
-            st.error("❌ 系统未连接")
-            st.info("请在「系统设置」中配置API Key")
+            st.warning("⚠️ 系统未连接")
+            st.info("请在「系统设置」中配置 API Key")
 
-        # 健康状态指示
-        st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
-        try:
-            health = health_checker.run_all_checks()
-            status_color = {"healthy": "green", "warning": "orange", "unhealthy": "red"}
-            status_text = {"healthy": "健康", "warning": "警告", "unhealthy": "异常"}
-            color = status_color.get(health["overall_status"], "gray")
-            text = status_text.get(health["overall_status"], "未知")
-            st.markdown(f"**系统状态**: :{color}[{text}]")
-        except Exception as e:
-            st.markdown("**系统状态**: :gray[检查中...]")
-            logger.warning("健康检查失败: %s", e)
-
-    # 路由到对应页面
+    # ============ 页面路由 ============
     try:
-        if selected_label == "📊 仪表盘":
+        if page == "📊 仪表盘":
             from ui.pages.dashboard import render_dashboard
             render_dashboard()
-        elif selected_label == "📝 内容分析":
+        elif page == "📝 内容分析":
             from ui.pages.content_analysis import render_content_analysis
             render_content_analysis()
-        elif selected_label == "👤 线索分析":
+        elif page == "👤 线索分析":
             from ui.pages.lead_analysis import render_lead_analysis
             render_lead_analysis()
-        elif selected_label == "🎯 匹配中心":
+        elif page == "🎯 匹配中心":
             from ui.pages.match_center import render_match_center
             render_match_center()
-        elif selected_label == "💡 策略建议":
+        elif page == "💡 策略建议":
             from ui.pages.strategy import render_strategy
             render_strategy()
-        elif selected_label == "💰 成本分析":
+        elif page == "💰 成本分析":
             from ui.pages.cost_analytics import render_cost_analytics
             render_cost_analytics()
-        elif selected_label == "⚙️ 系统设置":
+        elif page == "⚙️ 系统设置":
             from ui.pages.settings import render_settings
             render_settings()
     except Exception as e:
         logger.error("页面渲染异常: %s", e, exc_info=True)
         st.error(f"页面加载出错: {_safe_error_message(e)}")
-        st.info("请尝试刷新页面，或前往「系统设置」检查配置。")
 
 
 if __name__ == "__main__":
