@@ -106,17 +106,32 @@ def main():
     if "current_page" not in st.session_state:
         st.session_state.current_page = "📊 仪表盘"
 
+    # 处理按钮跳转（必须在 radio 渲染之前，通过修改 current_page 来影响 index）
+    nav_target = st.session_state.pop("nav_target", None)
+    if nav_target:
+        nav_map = {
+            "settings": "⚙️ 系统设置",
+            "content": "📝 内容分析",
+            "lead": "👤 线索分析",
+            "match": "🎯 匹配中心",
+            "strategy": "💡 策略建议",
+            "cost": "💰 成本分析",
+            "dashboard": "📊 仪表盘",
+        }
+        if nav_target in nav_map:
+            st.session_state.current_page = nav_map[nav_target]
+
     # ============ 侧边栏 ============
     with st.sidebar:
         st.markdown("## Content2Revenue AI")
         st.caption("AI驱动的内容-商业转化智能平台")
         st.markdown("---")
 
-        # 使用 on_change 回调 + session_state 管理导航，避免 index 冲突
+        # 使用 on_change 回调同步页面状态
         def _on_page_change():
             st.session_state.current_page = st.session_state._page_radio
 
-        # 计算初始 index（仅用于首次渲染）
+        # 计算初始 index（基于 current_page，按钮跳转后自动指向正确选项）
         try:
             init_index = page_options.index(st.session_state.current_page)
         except ValueError:
@@ -130,23 +145,6 @@ def main():
             key="_page_radio",
             on_change=_on_page_change,
         )
-
-        # 同步 nav_target 跳转（从按钮跳转过来时）
-        nav_target = st.session_state.pop("nav_target", None)
-        if nav_target:
-            nav_map = {
-                "settings": "⚙️ 系统设置",
-                "content": "📝 内容分析",
-                "lead": "👤 线索分析",
-                "match": "🎯 匹配中心",
-                "strategy": "💡 策略建议",
-                "cost": "💰 成本分析",
-                "dashboard": "📊 仪表盘",
-            }
-            if nav_target in nav_map:
-                st.session_state.current_page = nav_map[nav_target]
-                st.session_state._page_radio = nav_map[nav_target]
-                st.rerun()
 
         current_page = st.session_state.current_page
 
