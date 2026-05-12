@@ -189,6 +189,10 @@ def main():
             index=default_index,
         )
 
+        # 将 radio 的选中值同步回 session_state，确保下次 rerun 时 index 正确
+        if page in current_page_map:
+            st.session_state.page = current_page_map[page]
+
         st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
 
         # 系统状态
