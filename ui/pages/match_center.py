@@ -18,6 +18,63 @@ from ui.components.design_system import (
 from ui.styles import COLORS
 
 
+def _render_content_snapshot(snap: dict):
+    """渲染内容快照摘要"""
+    if not snap:
+        st.write("暂无内容信息")
+        return
+
+    score = snap.get("content_score", "N/A")
+    hook = snap.get("hook_type", "未知")
+    category = snap.get("content_category", "未知")
+    cta = snap.get("cta_type", "未知")
+    tone = snap.get("emotion_tone", "未知")
+    audience = snap.get("target_audience", "未知")
+    tags = snap.get("topic_tags", [])
+    keywords = snap.get("hook_keywords", [])
+    selling = snap.get("key_selling_points", [])
+
+    st.write(f"**内容评分**: {score}/10")
+    st.write(f"**Hook类型**: {hook}")
+    st.write(f"**内容分类**: {category}")
+    st.write(f"**CTA类型**: {cta}")
+    st.write(f"**情感基调**: {tone}")
+    st.write(f"**目标受众**: {audience}")
+
+    if tags:
+        st.write(f"**话题标签**: {', '.join(tags)}")
+    if keywords:
+        st.write(f"**Hook关键词**: {', '.join(keywords)}")
+    if selling:
+        st.write(f"**核心卖点**: {', '.join(selling)}")
+
+
+def _render_lead_snapshot(snap: dict):
+    """渲染线索快照摘要"""
+    if not snap:
+        st.write("暂无线索信息")
+        return
+
+    industry = snap.get("industry", "未知")
+    stage = snap.get("company_stage", "未知")
+    role = snap.get("role", "未知")
+    buying = snap.get("buying_stage", "未知")
+    score = snap.get("lead_score", "N/A")
+    grade = snap.get("lead_grade", "N/A")
+    intent = snap.get("intent_level", "N/A")
+    pains = snap.get("pain_points", [])
+
+    st.write(f"**行业**: {industry}")
+    st.write(f"**公司阶段**: {stage}")
+    st.write(f"**决策角色**: {role}")
+    st.write(f"**购买阶段**: {buying}")
+    st.write(f"**线索评分**: {score}/100 ({grade}级)")
+    st.write(f"**购买意向**: {intent}/10")
+
+    if pains:
+        st.write(f"**核心痛点**: {', '.join(pains)}")
+
+
 class MatchCenterPage(MatchPage):
     """匹配中心页面类"""
 
@@ -52,7 +109,11 @@ class MatchCenterPage(MatchPage):
         content_options = {}
         for c in contents:
             analysis = c.get("analysis_json", {})
-            label = f"[{analysis.get('content_score', '?')}/10] {c.get('raw_text', '')[:40]}..."
+            raw_text = c.get("raw_text", "")
+            # 显示脚本前30字 + 评分
+            preview = raw_text[:30].replace("\n", " ") + "..." if len(raw_text) > 30 else raw_text
+            score = analysis.get("content_score", "?")
+            label = f"[{score}/10] {preview}"
             content_options[label] = c["id"]
 
         lead_options = {}
@@ -60,7 +121,9 @@ class MatchCenterPage(MatchPage):
             profile = lead.get("profile_json", {})
             raw = lead.get("raw_data_json", {})
             company = raw.get("company", raw.get("公司名称", "未知"))
-            label = f"[{profile.get('lead_grade', '?')}] {company} - {profile.get('industry', '未知')}"
+            grade = profile.get("lead_grade", "?")
+            industry = profile.get("industry", "未知")
+            label = f"[{grade}级] {company} ({industry})"
             lead_options[label] = lead["id"]
 
         col1, col2 = st.columns(2)
@@ -109,33 +172,107 @@ class MatchCenterPage(MatchPage):
                     )
 
                     for r in results:
-                        company = r.get("lead_snapshot", {}).get("company", "未知")
-                        industry = r.get("lead_snapshot", {}).get("industry", "未知")
+                        lead_snap = r.get("lead_snapshot", {})
+                        company = lead_snap.get("company", "未知")
+                        industry = lead_snap.get("industry", "未知")
+                        grade = lead_snap.get("lead_grade", "?")
 
-                        with st.expander(f"线索: {company} ({industry})"):
+                        grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
+                        title = f"{grade_icon} {grade}级 | {company}"
+                        if industry and industry != "未知":
+                            title += f" ({industry})"
+
+                        with st.expander(title):
+                            # 线索摘要
+                            with st.container():
+                                st.markdown("**👤 线索信息**")
+                                _render_lead_snapshot(lead_snap)
+
                             for i, match in enumerate(r.get("top_matches", [])):
                                 mr = match.get("match_result", {})
                                 score = mr.get("overall_score", 0)
-                                reason = mr.get("match_reason", "")
+                                content_snap = match.get("content_snapshot", {})
 
-                                st.markdown(f"**#{i+1} 匹配度: {score}/10**")
-                                st.write(reason)
+                                st.markdown("---")
+                                score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
+                                st.markdown(f"**{score_icon} #{i+1} 匹配度: {score}/10**")
+
+                                # 内容摘要
+                                st.markdown("**📝 匹配内容**")
+                                _render_content_snapshot(content_snap)
+
+                                # 匹配原因
+                                reason = mr.get("match_reason", "")
+                                if reason:
+                                    st.markdown("**匹配分析**")
+                                    st.write(reason)
 
                                 # 维度评分
                                 ds = mr.get("dimension_scores", {})
                                 if ds:
                                     self._render_dimension_scores(ds, columns=5)
 
-                                if i < len(r.get("top_matches", [])) - 1:
-                                    st.markdown("---")
-
                 except Exception as e:
                     progress_bar.empty()
                     callout(f"批量匹配失败: {str(e)}", type="error")
 
     def _display_match_result(self, result: dict):
-        """展示匹配结果"""
-        render_match_result_details(result)
+        """展示单对匹配结果（含内容和线索详情）"""
+        mr = result.get("match_result", {})
+        content_snap = result.get("content_snapshot", {})
+        lead_snap = result.get("lead_snapshot", {})
+        score = mr.get("overall_score", 0)
+
+        # 顶部：综合评分
+        color = "#10B981" if score >= 7 else "#F59E0B" if score >= 5 else "#EF4444"
+        metric_card(
+            title="综合匹配度",
+            value=f"{score}/10",
+            subtitle="强匹配" if score >= 7 else "中等匹配" if score >= 5 else "弱匹配",
+            icon="&#127919;",
+            border_color=color,
+        )
+
+        divider()
+
+        # 内容和线索详情（双列）
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("#### 📝 匹配的内容")
+            _render_content_snapshot(content_snap)
+        with col_b:
+            st.markdown("#### 👤 匹配的线索")
+            _render_lead_snapshot(lead_snap)
+
+        divider()
+
+        # 匹配分析
+        reason = mr.get("match_reason", "")
+        if reason:
+            st.markdown("#### 匹配分析")
+            st.write(reason)
+
+        # 维度评分
+        ds = mr.get("dimension_scores", {})
+        if ds:
+            st.markdown("#### 维度评分")
+            self._render_dimension_scores(ds, columns=5)
+
+        # 风险和建议
+        risks = mr.get("risk_factors", [])
+        follow_up = mr.get("recommended_follow_up", "")
+        if risks or follow_up:
+            divider()
+            col1, col2 = st.columns(2)
+            with col1:
+                if risks:
+                    st.markdown("#### ⚠️ 风险因素")
+                    for risk in risks:
+                        st.write(f"- {risk}")
+            with col2:
+                if follow_up:
+                    st.markdown("#### 💡 跟进建议")
+                    st.info(follow_up)
 
     def _render_history(self):
         """展示历史匹配记录"""
@@ -148,51 +285,65 @@ class MatchCenterPage(MatchPage):
                     score = mr.get("overall_score", "N/A")
                     reason = mr.get("match_reason", "")
 
-                    # 提取内容和线索信息
+                    # 提取快照信息
                     content_snap = record.get("content_snapshot_json", {})
                     lead_snap = record.get("lead_snapshot_json", {})
-                    content_text = content_snap.get("raw_text", "")[:60]
-                    company = lead_snap.get("company", lead_snap.get("公司名称", "未知"))
+
+                    # 构建标题
+                    content_score = content_snap.get("content_score", "?")
+                    hook = content_snap.get("hook_type", "")
+                    category = content_snap.get("content_category", "")
+                    content_label = f"{hook}"
+                    if category and category != "未知":
+                        content_label += f" · {category}"
+                    content_label += f" (评分{content_score})"
+
+                    lead_grade = lead_snap.get("lead_grade", "?")
                     industry = lead_snap.get("industry", "未知")
-
-                    # 标题：评分 + 公司 + 内容摘要
-                    title = f"匹配度 {score}/10 | {company}"
+                    intent = lead_snap.get("intent_level", "?")
+                    lead_label = f"{lead_grade}级"
                     if industry and industry != "未知":
-                        title += f" ({industry})"
+                        lead_label += f" · {industry}"
+                    lead_label += f" (意向{intent}/10)"
 
-                    # 评分颜色
                     score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
+                    created = record.get("created_at", "")[:10]
 
-                    with st.expander(f"{score_icon} {title}"):
-                        # 内容和线索来源
+                    with st.expander(f"{score_icon} 匹配度 {score}/10 | {created}"):
+                        # 双列：内容 vs 线索
                         col_a, col_b = st.columns(2)
                         with col_a:
-                            st.markdown("**📝 匹配内容**")
-                            st.caption(content_text + "..." if len(content_snap.get("raw_text", "")) > 60 else content_text)
+                            st.markdown(f"**📝 内容**: {content_label}")
+                            tags = content_snap.get("topic_tags", [])
+                            if tags:
+                                st.caption(f"话题: {', '.join(tags)}")
+                            cta = content_snap.get("cta_type", "")
+                            if cta:
+                                st.caption(f"CTA: {cta}")
                         with col_b:
-                            st.markdown("**👤 匹配线索**")
-                            st.write(f"公司: {company}")
-                            if industry and industry != "未知":
-                                st.write(f"行业: {industry}")
+                            st.markdown(f"**👤 线索**: {lead_label}")
+                            pains = lead_snap.get("pain_points", [])
+                            if pains:
+                                st.caption(f"痛点: {', '.join(pains[:3])}")
 
                         st.markdown("---")
 
-                        # 完整匹配原因（不截断）
-                        st.markdown("**匹配分析**")
-                        st.write(reason)
+                        # 完整匹配原因
+                        if reason:
+                            st.markdown("**匹配分析**")
+                            st.write(reason)
 
                         # 维度评分
                         ds = mr.get("dimension_scores", {})
                         if ds:
-                            st.markdown("**维度评分**")
                             self._render_dimension_scores(ds, columns=5)
 
-                        # 匹配建议
-                        suggestion = mr.get("suggestion", "")
-                        if suggestion:
+                        # 跟进建议
+                        follow_up = mr.get("recommended_follow_up", "")
+                        if follow_up:
                             st.markdown("---")
-                            st.markdown("**💡 建议**")
-                            st.write(suggestion)
+                            st.markdown("**💡 跟进建议**")
+                            st.info(follow_up)
             else:
                 empty_state(
                     title="暂无匹配记录",
