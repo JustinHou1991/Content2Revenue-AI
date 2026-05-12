@@ -16,7 +16,7 @@ BUILTIN_MODELS = [
     "sensechat-turbo",
     "sensenova-v6-pro",
     "sensenova-v6-turbo",
-    "LongCat-Flash-Thinking-2601",
+    "LongCat-Flash-Chat",
 ]
 
 MODEL_DISPLAY_NAMES = {
@@ -29,7 +29,7 @@ MODEL_DISPLAY_NAMES = {
     "sensechat-turbo": "商汤 SenseChat-Turbo",
     "sensenova-v6-pro": "商汤 SenseNova V6 Pro",
     "sensenova-v6-turbo": "商汤 SenseNova V6 Turbo",
-    "LongCat-Flash-Thinking-2601": "LongCat Flash Thinking",
+    "LongCat-Flash-Chat": "LongCat Flash Chat",
 }
 
 

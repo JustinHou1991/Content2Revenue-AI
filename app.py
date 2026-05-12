@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 # ============================================================
 # 固化模型配置（面试展示用，无需手动配置）
 # ============================================================
-DEFAULT_MODEL = "LongCat-Flash-Thinking-2601"
+DEFAULT_MODEL = "LongCat-Flash-Chat"
 DEFAULT_API_KEY = "ak_28d06A0NE4BA8hu9ok17L5Nj3pt5N"
 
 # 初始化session state

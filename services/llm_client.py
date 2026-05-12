@@ -134,7 +134,7 @@ class LLMClient:
             "cost_per_1k_output": 0.0045,
         },
         # ===== LongCat =====
-        "LongCat-Flash-Thinking-2601": {
+        "LongCat-Flash-Chat": {
             "base_url": "https://api.longcat.chat/openai",
             "env_key": "LONGCAT_API_KEY",
             "max_tokens_default": 8192,
