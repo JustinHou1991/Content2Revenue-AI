@@ -170,21 +170,23 @@ def main():
         }
 
         # 检查是否有导航目标（从其他页面跳转过来）
-        nav_target = st.session_state.get("nav_target")
-        default_index = 0
+        nav_target = st.session_state.pop("nav_target", None)
         if nav_target and nav_target in nav_key_to_page:
-            default_index = list(nav_key_to_page.keys()).index(nav_target)
-            # 清空导航目标，避免重复跳转
-            st.session_state.nav_target = None
+            st.session_state.page = nav_target
+
+        # 确定当前激活的导航项
+        default_index = list(nav_key_to_page.keys()).index(
+            st.session_state.get("page", "dashboard")
+        )
 
         # 使用默认的 st.radio 作为导航（保持原有行为）
+        # 注意：不使用 key 参数，这样 index 每次渲染都生效
         page = st.radio(
             "导航",
             list(nav_key_to_page.values()),
             label_visibility="collapsed",
             format_func=lambda x: x,
             index=default_index,
-            key="sidebar_nav",
         )
 
         st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
