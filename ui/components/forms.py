@@ -49,6 +49,7 @@ def render_file_uploader(
 
 def render_text_area(
     label: str,
+    value: str = "",
     placeholder: str = "",
     height: int = 200,
     max_chars: Optional[int] = None,
@@ -59,6 +60,7 @@ def render_text_area(
 
     Args:
         label: 标签
+        value: 默认值
         placeholder: 占位符文本
         height: 高度(像素)
         max_chars: 最大字符数
@@ -70,6 +72,7 @@ def render_text_area(
     """
     text = st.text_area(
         label,
+        value=value,
         placeholder=placeholder,
         height=height,
         max_chars=max_chars,
