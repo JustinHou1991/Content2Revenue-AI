@@ -65,31 +65,14 @@ def _auto_init_orchestrator():
     try:
         from services.orchestrator import Orchestrator
 
-        # 优先使用数据库中用户手动切换的模型
-        db_model = None
-        db_api_key = None
-        try:
-            from services.database import Database
-            db = Database()
-            db_model = db.get_setting("MODEL", "")
-            db_api_key = db.get_setting("API_KEY", "")
-            db.close()
-        except Exception:
-            pass
-
-        # 如果用户手动配置过其他模型，使用用户的配置
-        if db_model and db_model != DEFAULT_MODEL and db_api_key:
-            model = db_model
-            api_key = db_api_key
-            logger.info("使用用户配置: model=%s", model)
-        else:
-            # 使用固化默认配置
-            model = DEFAULT_MODEL
-            api_key = DEFAULT_API_KEY
-            logger.info("使用默认固化配置: model=%s", model)
+        # 使用固化默认配置（强制使用，忽略数据库中的旧配置）
+        model = DEFAULT_MODEL
+        api_key = DEFAULT_API_KEY
+        logger.info("使用默认固化配置: model=%s", model)
 
         st.session_state.orchestrator = Orchestrator(model=model, api_key=api_key)
         st.session_state.initialized = True
+        logger.info("Orchestrator 初始化成功")
         return True
     except Exception as e:
         logger.error("初始化 Orchestrator 失败: %s", e, exc_info=True)
