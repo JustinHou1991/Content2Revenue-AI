@@ -129,85 +129,84 @@ def main():
     if not st.session_state.initialized:
         init_orchestrator()
 
-    # 侧边栏导航 - 使用新设计系统组件
-    from ui.components.design_system import sidebar_logo, sidebar_nav
+    # 定义页面映射（在sidebar外部定义，确保可访问）
+    nav_key_to_page = {
+        "dashboard": "📊 仪表盘",
+        "content": "📝 内容分析",
+        "lead": "👤 线索分析",
+        "match": "🎯 匹配中心",
+        "strategy": "💡 策略建议",
+        "cost": "💰 成本分析",
+        "settings": "⚙️ 系统设置",
+    }
 
+    current_page_map = {
+        "📊 仪表盘": "dashboard",
+        "📝 内容分析": "content",
+        "👤 线索分析": "lead",
+        "🎯 匹配中心": "match",
+        "💡 策略建议": "strategy",
+        "💰 成本分析": "cost",
+        "⚙️ 系统设置": "settings",
+    }
+
+    # 检查是否有导航目标（从其他页面跳转过来）
+    nav_target = st.session_state.pop("nav_target", None)
+    if nav_target and nav_target in nav_key_to_page:
+        st.session_state.page = nav_target
+
+    # 获取当前页面，确保有默认值
+    current_page_key = st.session_state.get("page", "dashboard")
+    if current_page_key not in nav_key_to_page:
+        current_page_key = "dashboard"
+        st.session_state.page = current_page_key
+
+    # 侧边栏导航
     with st.sidebar:
-        sidebar_logo(name="Content2Revenue", subtitle="AI")
+        # Logo
+        try:
+            from ui.components.design_system import sidebar_logo
+            sidebar_logo(name="Content2Revenue", subtitle="AI")
+        except Exception as e:
+            st.markdown("### Content2Revenue AI")
+            logger.warning(f"Logo加载失败: {e}")
 
         st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
 
-        nav_items = [
-            {"label": "仪表盘", "icon": "📊", "key": "dashboard"},
-            {"label": "内容分析", "icon": "📝", "key": "content"},
-            {"label": "线索分析", "icon": "👤", "key": "lead"},
-            {"label": "匹配中心", "icon": "🎯", "key": "match"},
-            {"label": "策略建议", "icon": "💡", "key": "strategy"},
-            {"label": "成本分析", "icon": "💰", "key": "cost"},
-            {"label": "系统设置", "icon": "⚙️", "key": "settings"},
-        ]
+        # 导航菜单
+        nav_labels = list(nav_key_to_page.values())
+        try:
+            default_index = list(nav_key_to_page.keys()).index(current_page_key)
+        except ValueError:
+            default_index = 0
 
-        # 映射导航 key 到页面名称
-        nav_key_to_page = {
-            "dashboard": "📊 仪表盘",
-            "content": "📝 内容分析",
-            "lead": "👤 线索分析",
-            "match": "🎯 匹配中心",
-            "strategy": "💡 策略建议",
-            "cost": "💰 成本分析",
-            "settings": "⚙️ 系统设置",
-        }
-
-        # 确定当前激活的导航项
-        current_page_map = {
-            "📊 仪表盘": "dashboard",
-            "📝 内容分析": "content",
-            "👤 线索分析": "lead",
-            "🎯 匹配中心": "match",
-            "💡 策略建议": "strategy",
-            "💰 成本分析": "cost",
-            "⚙️ 系统设置": "settings",
-        }
-
-        # 检查是否有导航目标（从其他页面跳转过来）
-        nav_target = st.session_state.pop("nav_target", None)
-        if nav_target and nav_target in nav_key_to_page:
-            st.session_state.page = nav_target
-
-        # 确定当前激活的导航项
-        default_index = list(nav_key_to_page.keys()).index(
-            st.session_state.get("page", "dashboard")
-        )
-
-        # 使用默认的 st.radio 作为导航（保持原有行为）
-        # 注意：不使用 key 参数，这样 index 每次渲染都生效
-        page = st.radio(
+        # 使用 radio 作为导航
+        selected_label = st.radio(
             "导航",
-            list(nav_key_to_page.values()),
+            nav_labels,
             label_visibility="collapsed",
-            format_func=lambda x: x,
             index=default_index,
         )
 
-        # 将 radio 的选中值同步回 session_state，确保下次 rerun 时 index 正确
-        if page in current_page_map:
-            st.session_state.page = current_page_map[page]
+        # 同步回 session_state
+        if selected_label in current_page_map:
+            st.session_state.page = current_page_map[selected_label]
 
         st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
 
         # 系统状态
         if st.session_state.initialized:
-            st.success("系统已连接")
+            st.success("✅ 系统已连接")
             try:
                 stats = st.session_state.orchestrator.get_dashboard_data()["stats"]
-                st.metric("已分析内容", stats["content_count"])
-                st.metric("已分析线索", stats["lead_count"])
-                st.metric("匹配次数", stats["match_count"])
+                st.metric("已分析内容", stats.get("content_count", 0))
+                st.metric("已分析线索", stats.get("lead_count", 0))
+                st.metric("匹配次数", stats.get("match_count", 0))
             except Exception as e:
-                st.warning("数据库读取中...")
+                st.info("📊 统计数据加载中...")
                 logger.warning("侧边栏统计数据加载失败: %s", e)
         else:
-            st.error("系统未连接")
+            st.error("❌ 系统未连接")
             st.info("请在「系统设置」中配置API Key")
 
         # 健康状态指示
@@ -215,40 +214,35 @@ def main():
         try:
             health = health_checker.run_all_checks()
             status_color = {"healthy": "green", "warning": "orange", "unhealthy": "red"}
+            status_text = {"healthy": "健康", "warning": "警告", "unhealthy": "异常"}
             color = status_color.get(health["overall_status"], "gray")
-            st.markdown(f"**系统健康**: :{color}[{health['overall_status'].upper()}]")
-
-            # 展开显示详细状态
-            with st.expander("查看详情"):
-                for check_name, check_result in health["checks"].items():
-                    check_status = check_result.get("status", "unknown")
-                    check_color = status_color.get(check_status, "gray")
-                    st.markdown(f"- {check_name}: :{check_color}[{check_status}]")
+            text = status_text.get(health["overall_status"], "未知")
+            st.markdown(f"**系统状态**: :{color}[{text}]")
         except Exception as e:
-            st.markdown("**系统健康**: :gray[UNKNOWN]")
+            st.markdown("**系统状态**: :gray[检查中...]")
             logger.warning("健康检查失败: %s", e)
 
     # 路由到对应页面
     try:
-        if page == "📊 仪表盘":
+        if selected_label == "📊 仪表盘":
             from ui.pages.dashboard import render_dashboard
             render_dashboard()
-        elif page == "📝 内容分析":
+        elif selected_label == "📝 内容分析":
             from ui.pages.content_analysis import render_content_analysis
             render_content_analysis()
-        elif page == "👤 线索分析":
+        elif selected_label == "👤 线索分析":
             from ui.pages.lead_analysis import render_lead_analysis
             render_lead_analysis()
-        elif page == "🎯 匹配中心":
+        elif selected_label == "🎯 匹配中心":
             from ui.pages.match_center import render_match_center
             render_match_center()
-        elif page == "💡 策略建议":
+        elif selected_label == "💡 策略建议":
             from ui.pages.strategy import render_strategy
             render_strategy()
-        elif page == "💰 成本分析":
+        elif selected_label == "💰 成本分析":
             from ui.pages.cost_analytics import render_cost_analytics
             render_cost_analytics()
-        elif page == "⚙️ 系统设置":
+        elif selected_label == "⚙️ 系统设置":
             from ui.pages.settings import render_settings
             render_settings()
     except Exception as e:
