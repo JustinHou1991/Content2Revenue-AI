@@ -211,25 +211,25 @@ def main():
 
     # ============ 页面路由 ============
     try:
-        if page == "📊 仪表盘":
+        if current_page == "📊 仪表盘":
             from ui.pages.dashboard import render_dashboard
             render_dashboard()
-        elif page == "📝 内容分析":
+        elif current_page == "📝 内容分析":
             from ui.pages.content_analysis import render_content_analysis
             render_content_analysis()
-        elif page == "👤 线索分析":
+        elif current_page == "👤 线索分析":
             from ui.pages.lead_analysis import render_lead_analysis
             render_lead_analysis()
-        elif page == "🎯 匹配中心":
+        elif current_page == "🎯 匹配中心":
             from ui.pages.match_center import render_match_center
             render_match_center()
-        elif page == "💡 策略建议":
+        elif current_page == "💡 策略建议":
             from ui.pages.strategy import render_strategy
             render_strategy()
-        elif page == "💰 成本分析":
+        elif current_page == "💰 成本分析":
             from ui.pages.cost_analytics import render_cost_analytics
             render_cost_analytics()
-        elif page == "⚙️ 系统设置":
+        elif current_page == "⚙️ 系统设置":
             from ui.pages.settings import render_settings
             render_settings()
     except Exception as e:
