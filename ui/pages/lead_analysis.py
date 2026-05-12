@@ -338,10 +338,20 @@ class LeadAnalysisPage(AnalysisPage):
             for r in results:
                 if r.get("success"):
                     profile = r["data"]["profile"]
+                    raw = r["data"].get("raw_data", {})
+                    company = raw.get("company", raw.get("公司名称", ""))
+                    name = raw.get("name", raw.get("联系人", ""))
+                    score = profile.get("lead_score", 0)
+                    grade = profile.get("lead_grade", "N/A")
+
+                    label = f"{company}" if company else f"线索 #{r['index']+1}"
+                    if name:
+                        label += f" · {name}"
+
                     with st.expander(
-                        f"线索 #{r['index']+1} - 评分 {profile.get('lead_score', 'N/A')}/100 ({profile.get('lead_grade', 'N/A')})"
+                        f"{'🟢' if grade in ['A','B+'] else '🟡' if grade == 'B' else '🔴'} {grade}级 | {score}分 | {label}"
                     ):
-                        self._display_profile(profile)
+                        self._display_profile_simple(profile)
                 else:
                     with st.expander(f"线索 #{r['index']+1} - 分析失败"):
                         st.error(r.get("error", "未知错误"))
