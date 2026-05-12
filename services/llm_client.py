@@ -255,39 +255,61 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
+        max_retries: int = 3,
     ) -> str:
         """
-        普通对话调用
+        普通对话调用（内置 429 退避重试）
 
         Args:
             messages: OpenAI格式的消息列表
             temperature: 温度参数
             max_tokens: 最大输出token数
+            max_retries: 429/5xx 最大重试次数
 
         Returns:
             模型生成的文本
         """
-        try:
-            start_time = time.monotonic()
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens or self.config["max_tokens_default"],
-            )
-            self._record_usage(response)
-            elapsed = time.monotonic() - start_time
-            content = response.choices[0].message.content or ""
-            logger.info(
-                "chat() 完成: model=%s, tokens=%d, 耗时=%.2fs",
-                self.model,
-                response.usage.completion_tokens if response.usage else -1,
-                elapsed,
-            )
-            return content
-        except Exception as e:
-            logger.error("chat() 调用失败: %s", e)
-            raise RuntimeError(f"LLM调用失败: {str(e)}")
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                start_time = time.monotonic()
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens or self.config["max_tokens_default"],
+                )
+                self._record_usage(response)
+                elapsed = time.monotonic() - start_time
+                content = response.choices[0].message.content or ""
+                logger.info(
+                    "chat() 完成: model=%s, tokens=%d, 耗时=%.2fs",
+                    self.model,
+                    response.usage.completion_tokens if response.usage else -1,
+                    elapsed,
+                )
+                return content
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                # 429 速率限制或 5xx 服务端错误 → 指数退避重试
+                is_rate_limit = "429" in error_str or "rate_limit" in error_str.lower()
+                is_server_error = any(code in error_str for code in ["500", "502", "503", "504"])
+                if (is_rate_limit or is_server_error) and attempt < max_retries:
+                    wait_time = min(2 ** attempt * 2, 30)  # 2s, 4s, 8s, ... 最大30s
+                    logger.warning(
+                        "chat() 第 %d 次调用遇到 %s，等待 %ds 后重试: %s",
+                        attempt + 1,
+                        "速率限制" if is_rate_limit else "服务端错误",
+                        wait_time,
+                        error_str[:200],
+                    )
+                    time.sleep(wait_time)
+                    continue
+                logger.error("chat() 调用失败（已重试 %d 次）: %s", attempt + 1, e)
+                break
+
+        raise RuntimeError(f"LLM调用失败: {str(last_error)}")
 
     def chat_json(
         self,
@@ -411,6 +433,20 @@ class LLMClient:
                     raise
                 continue
             except Exception as e:
+                # 429 速率限制 → 指数退避后重试
+                error_str = str(e)
+                is_rate_limit = "429" in error_str or "rate_limit" in error_str.lower()
+                is_server_error = any(code in error_str for code in ["500", "502", "503", "504"])
+                if (is_rate_limit or is_server_error) and attempt < max_retries:
+                    wait_time = min(2 ** attempt * 2, 30)
+                    logger.warning(
+                        "chat_json() 第 %d 次调用遇到 %s，等待 %ds 后重试",
+                        attempt + 1,
+                        "速率限制" if is_rate_limit else "服务端错误",
+                        wait_time,
+                    )
+                    time.sleep(wait_time)
+                    continue
                 if attempt == max_retries:
                     raise
                 logger.debug(
