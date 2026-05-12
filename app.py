@@ -53,9 +53,8 @@ def _restore_custom_models():
             if not middle:
                 continue
 
-            model_id = db.get_setting(f"CUSTOM_MODEL_{middle}_MODEL_ID", "")
             api_key = db.get_setting(f"CUSTOM_MODEL_{middle}_API_KEY", "")
-            if base_url and model_id and api_key:
+            if base_url and api_key:
                 try:
                     model_key = f"custom_{middle}"
                     register_custom_model(

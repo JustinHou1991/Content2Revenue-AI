@@ -178,40 +178,28 @@ def render_settings():
 
         with st.form("add_custom_model"):
             st.markdown("**添加新模型**")
-            col_name, col_url = st.columns(2)
-            with col_name:
-                custom_name = st.text_input(
-                    "模型名称",
-                    placeholder="例如: my-gpt-4o",
-                    help="自定义标识符，用于在模型列表中显示",
-                )
-            with col_url:
-                custom_base_url = st.text_input(
-                    "API Base URL",
-                    placeholder="https://api.openai.com/v1",
-                    help="OpenAI 兼容 API 地址",
-                )
-
-            col_key, col_id = st.columns(2)
-            with col_key:
-                custom_api_key = st.text_input(
-                    "API Key",
-                    type="password",
-                    placeholder="sk-...",
-                )
-            with col_id:
-                custom_model_id = st.text_input(
-                    "模型 ID",
-                    placeholder="gpt-4o",
-                    help="API 请求中 model 字段的值",
-                )
+            custom_name = st.text_input(
+                "模型名称",
+                placeholder="例如: my-gpt-4o",
+                help="自定义标识符，用于在模型列表中显示",
+            )
+            custom_base_url = st.text_input(
+                "API Base URL",
+                placeholder="https://api.openai.com/v1",
+                help="OpenAI 兼容 API 地址（通常以 /v1 结尾）",
+            )
+            custom_api_key = st.text_input(
+                "API Key",
+                type="password",
+                placeholder="sk-...",
+            )
 
             submitted = st.form_submit_button(
                 "添加模型", type="primary", use_container_width=True
             )
 
             if submitted:
-                if not custom_name or not custom_base_url or not custom_api_key or not custom_model_id:
+                if not custom_name or not custom_base_url or not custom_api_key:
                     st.error("请填写所有字段")
                 else:
                     try:
@@ -228,7 +216,6 @@ def render_settings():
                         db = _get_db()
                         if db:
                             db.set_setting(f"CUSTOM_MODEL_{custom_name}_BASE_URL", custom_base_url.rstrip("/"))
-                            db.set_setting(f"CUSTOM_MODEL_{custom_name}_MODEL_ID", custom_model_id)
                             db.set_setting(f"CUSTOM_MODEL_{custom_name}_API_KEY", custom_api_key)
 
                         st.success(f"模型「{custom_name}」添加成功！请在「快速配置」中选择使用。")
@@ -255,7 +242,7 @@ def render_settings():
                             # 清理数据库
                             db = _get_db()
                             if db:
-                                for suffix in ["BASE_URL", "MODEL_ID", "API_KEY"]:
+                                for suffix in ["BASE_URL", "API_KEY"]:
                                     db.delete_setting(f"CUSTOM_MODEL_{display_name}_{suffix}")
                             st.rerun()
             else:
