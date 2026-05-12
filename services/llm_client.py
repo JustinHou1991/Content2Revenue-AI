@@ -18,8 +18,9 @@ from services.llm_cache import LLMCache
 logger = logging.getLogger(__name__)
 
 
-# 全局自定义模型注册表（支持运行时动态添加）
+# 全局自定义模型注册表（线程安全保护）
 _custom_model_configs: Dict[str, Dict[str, Any]] = {}
+_custom_model_lock = threading.Lock()
 
 
 def register_custom_model(
@@ -43,7 +44,8 @@ def register_custom_model(
         cost_per_1k_input:  每千输入 token 成本（美元）
         cost_per_1k_output: 每千输出 token 成本（美元）
     """
-    _custom_model_configs[model_name] = {
+    with _custom_model_lock:
+        _custom_model_configs[model_name] = {
         "base_url": base_url.rstrip("/"),
         "api_key": api_key,
         "max_tokens_default": max_tokens_default,
@@ -53,6 +55,14 @@ def register_custom_model(
         "_is_custom": True,
     }
     logger.info("已注册自定义模型: %s (base_url=%s)", model_name, base_url)
+
+
+def remove_custom_model(model_name: str) -> None:
+    """移除自定义模型配置"""
+    with _custom_model_lock:
+        if model_name in _custom_model_configs:
+            del _custom_model_configs[model_name]
+            logger.info("已移除自定义模型: %s", model_name)
 
 
 class LLMClient:
@@ -152,19 +162,20 @@ class LLMClient:
             model: 模型名称，支持内置模型或已注册的自定义模型
             api_key: API密钥；自定义模型会忽略此参数（使用注册时提供的密钥）
         """
-        # 优先查找自定义模型，其次查找内置模型
-        if model in _custom_model_configs:
-            self.config = _custom_model_configs[model]
-            self._is_custom = True
-        elif model in self.MODEL_CONFIGS:
-            self.config = self.MODEL_CONFIGS[model]
-            self._is_custom = False
-        else:
-            all_models = list(self.MODEL_CONFIGS.keys()) + list(_custom_model_configs.keys())
-            raise ValueError(
-                f"不支持的模型: {model}。"
-                f"支持的模型: {all_models}"
-            )
+        # 优先查找自定义模型，其次查找内置模型（加锁保护）
+        with _custom_model_lock:
+            if model in _custom_model_configs:
+                self.config = _custom_model_configs[model]
+                self._is_custom = True
+            elif model in self.MODEL_CONFIGS:
+                self.config = self.MODEL_CONFIGS[model]
+                self._is_custom = False
+            else:
+                all_models = list(self.MODEL_CONFIGS.keys()) + list(_custom_model_configs.keys())
+                raise ValueError(
+                    f"不支持的模型: {model}。"
+                    f"支持的模型: {all_models}"
+                )
 
         self.model: str = model
 
@@ -219,11 +230,12 @@ class LLMClient:
     @staticmethod
     def remove_custom_model(model_name: str) -> bool:
         """移除已注册的自定义模型"""
-        if model_name in _custom_model_configs:
-            del _custom_model_configs[model_name]
-            logger.info("已移除自定义模型: %s", model_name)
-            return True
-        return False
+        with _custom_model_lock:
+            if model_name in _custom_model_configs:
+                del _custom_model_configs[model_name]
+                logger.info("已移除自定义模型: %s", model_name)
+                return True
+            return False
 
     # ===== Token 与成本追踪 =====
 
@@ -406,13 +418,13 @@ class LLMClient:
         Returns:
             解析后的JSON字典
         """
-        # 构建消息列表
+        # 构建消息列表（原始版本，用于缓存键计算）
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ]
 
-        # 检查缓存
+        # 检查缓存（使用原始 messages 作为缓存键）
         if use_cache:
             cached_response = self._llm_cache.get(messages, self.model, temperature=temperature, max_tokens=max_tokens)
             if cached_response is not None:
@@ -426,9 +438,10 @@ class LLMClient:
 
         for attempt in range(max_retries + 1):
             try:
+                # 为每次尝试重新构建 messages（非 json_mode 时添加额外指令）
                 if not self.config["supports_json_mode"]:
                     # 不支持json mode的模型，用prompt引导
-                    messages = [
+                    attempt_messages = [
                         {
                             "role": "system",
                             "content": system_prompt
@@ -437,20 +450,20 @@ class LLMClient:
                         {"role": "user", "content": user_content},
                     ]
                     raw = self.chat(
-                        messages, temperature=temperature, max_tokens=max_tokens
+                        attempt_messages, temperature=temperature, max_tokens=max_tokens
                     )
                     # 尝试提取JSON
                     json_str = self._extract_json(raw)
                     response = json.loads(json_str)
                 else:
                     # 支持json mode的模型
-                    messages = [
+                    attempt_messages = [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content},
                     ]
                     api_response = self.client.chat.completions.create(
                         model=self.model,
-                        messages=messages,
+                        messages=attempt_messages,
                         temperature=temperature,
                         max_tokens=max_tokens or self.config["max_tokens_default"],
                         response_format={"type": "json_object"},
@@ -461,7 +474,7 @@ class LLMClient:
                         raise RuntimeError("模型返回了空内容，请重试或调整prompt")
                     response = json.loads(content)
 
-                # 缓存结果
+                # 缓存结果（使用原始 messages 作为缓存键，保证命中率）
                 if use_cache and response is not None:
                     self._llm_cache.set(messages, self.model, response, temperature=temperature, max_tokens=max_tokens)
 

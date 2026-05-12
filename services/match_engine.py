@@ -119,14 +119,14 @@ class MatchEngine(BaseAnalyzer):
 - 目标受众: {content.get('target_audience', '未知')}
 - 内容类型: {content.get('content_category', '未知')}
 - 转化阶段: {content.get('estimated_conversion_stage', '未知')}
-- 话题标签: {', '.join(content.get('topic_tags', []))}
-- 核心卖点: {', '.join(content.get('key_selling_points', []))}
+- 话题标签: {', '.join(content.get('topic_tags') or [])}
+- 核心卖点: {', '.join(content.get('key_selling_points') or [])}
 
 【线索画像】
 - 行业: {lead.get('industry', '未知')}
 - 公司阶段: {lead.get('company_stage', '未知')}
 - 决策角色: {lead.get('role', '未知')}
-- 核心痛点: {', '.join(lead.get('pain_points', []))}
+- 核心痛点: {', '.join(lead.get('pain_points') or [])}
 - 购买阶段: {lead.get('buying_stage', '未知')}
 - 紧迫程度: {lead.get('urgency', '未知')}
 - 意向度: {lead.get('intent_level', '未知')}/10

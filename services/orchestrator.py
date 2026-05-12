@@ -152,6 +152,8 @@ class Orchestrator:
         """
         完整Pipeline：脚本 → 内容分析 + 线索分析 → 匹配 → 策略建议
 
+        使用单一事务保证数据一致性，任一步骤失败则全部回滚。
+
         Args:
             script_text: 脚本文本
             lead_data: 线索数据
@@ -161,36 +163,47 @@ class Orchestrator:
         """
         logger.info("开始完整 Pipeline")
 
-        # Step 1: 分析内容
-        content_result = self.analyze_content(script_text)
-        content_id: str = content_result["content_id"]
+        try:
+            # 使用单一事务包装所有数据库操作
+            with self.db._get_conn() as conn:
+                conn.execute("BEGIN IMMEDIATE")
 
-        # Step 2: 分析线索
-        lead_result = self.analyze_lead(lead_data)
-        lead_id: str = lead_result["lead_id"]
+                # Step 1: 分析内容
+                content_result = self.analyze_content(script_text)
+                content_id: str = content_result["content_id"]
 
-        # Step 3: 匹配
-        match_result = self.match_engine.match(
-            content_result["analysis"],
-            lead_result["profile"],
-            content_id=content_result["content_id"],
-            lead_id=lead_result["lead_id"],
-        )
+                # Step 2: 分析线索
+                lead_result = self.analyze_lead(lead_data)
+                lead_id: str = lead_result["lead_id"]
 
-        # 注入 content_id 和 lead_id 到 snapshot 中
-        match_result["content_snapshot"]["content_id"] = content_id
-        match_result["lead_snapshot"]["lead_id"] = lead_id
+                # Step 3: 匹配
+                match_result = self.match_engine.match(
+                    content_result["analysis"],
+                    lead_result["profile"],
+                    content_id=content_result["content_id"],
+                    lead_id=lead_result["lead_id"],
+                )
 
-        self.db.save_match_result(match_result)
-        match_id: str = match_result["match_id"]
+                # 注入 content_id 和 lead_id 到 snapshot 中
+                match_result["content_snapshot"]["content_id"] = content_id
+                match_result["lead_snapshot"]["lead_id"] = lead_id
 
-        # Step 4: 生成策略
-        strategy_result = self.strategy_advisor.advise(
-            match_result,
-            content_feature=content_result["analysis"],
-            lead_profile=lead_result["profile"],
-        )
-        self.db.save_strategy_advice(strategy_result)
+                self.db.save_match_result(match_result)
+                match_id: str = match_result["match_id"]
+
+                # Step 4: 生成策略
+                strategy_result = self.strategy_advisor.advise(
+                    match_result,
+                    content_feature=content_result["analysis"],
+                    lead_profile=lead_result["profile"],
+                )
+                self.db.save_strategy_advice(strategy_result)
+
+                conn.commit()
+
+        except Exception as e:
+            logger.error("Pipeline 执行失败，正在回滚: %s", e)
+            raise
 
         logger.info(
             "完整 Pipeline 完成, content_id=%s, lead_id=%s, match_id=%s",

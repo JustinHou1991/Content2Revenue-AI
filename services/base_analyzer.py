@@ -113,8 +113,8 @@ class BaseAnalyzer(ABC):
             ValueError: 输入数据无效时
             RuntimeError: LLM调用失败时
         """
-        # 验证输入
-        self._validate_input(input_data)
+        # 验证并清洗输入
+        input_data = self._validate_input(input_data)
 
         # 构建提示词
         user_prompt = self._build_prompt_from_input(input_data)
@@ -144,13 +144,16 @@ class BaseAnalyzer(ABC):
 
         return result
 
-    def _validate_input(self, input_data: Any) -> None:
-        """验证输入数据
+    def _validate_input(self, input_data: Any) -> Any:
+        """验证并清洗输入数据
 
         子类可以重写此方法以添加特定验证逻辑。
 
         Args:
             input_data: 输入数据
+
+        Returns:
+            验证并清洗后的输入数据
 
         Raises:
             ValueError: 输入数据无效时
@@ -164,12 +167,13 @@ class BaseAnalyzer(ABC):
             if is_injection:
                 logger.warning(f"Prompt 注入检测: {msg}")
                 raise ValueError("输入包含可疑内容，请检查后重试")
-
-        # 清洗输入数据
-        if isinstance(input_data, str):
-            input_data = InputValidator.sanitize_text(input_data)
+            # 清洗输入数据
+            return InputValidator.sanitize_text(input_data)
         elif isinstance(input_data, dict):
-            input_data = sanitize_input(input_data)
+            # sanitize_input 返回新字典
+            return sanitize_input(input_data)
+        else:
+            return input_data
 
     def _build_prompt_from_input(self, input_data: Any) -> str:
         """根据输入数据构建提示词
