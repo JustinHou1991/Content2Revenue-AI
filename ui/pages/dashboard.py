@@ -186,11 +186,11 @@ def render_dashboard():
     col1, col2 = st.columns(2)
     with col1:
         if st.button("分析新脚本", use_container_width=True, type="primary"):
-            st.session_state.current_page = "内容分析"
+            st.session_state.nav_target = "content"
             st.rerun()
     with col2:
         if st.button("录入新线索", use_container_width=True, type="primary"):
-            st.session_state.current_page = "线索分析"
+            st.session_state.nav_target = "lead"
             st.rerun()
 
     divider()
