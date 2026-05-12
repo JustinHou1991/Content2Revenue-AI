@@ -129,20 +129,20 @@ def render_dashboard():
     if show_empty:
         divider()
 
-        def _go_to_settings():
-            # 使用独立的 nav_target 变量控制页面跳转
-            # 避免直接操作 widget 的 session_state key（会引发 StreamlitAPIException）
+        # 使用 Streamlit 原生按钮，直接在主流程中处理点击逻辑
+        # 不依赖 callback 机制，避免静默异常问题
+        if st.button(
+            "前往系统设置",
+            type="primary",
+            use_container_width=True,
+        ):
             st.session_state.nav_target = "settings"
             st.rerun()
 
-        empty_state(
-            title="欢迎使用 Content2Revenue AI",
-            description="开始你的第一个分析任务，AI 将帮你优化内容变现策略。"
+        st.info(
+            "配置好 API Key 后，刷新页面即可看到数据概览和图表。"
             if is_initialized
-            else "请先前往「系统设置」配置 API Key，然后加载示例数据或开始你的第一个分析任务。",
-            icon="&#128075;",
-            action_label="前往系统设置" if not is_initialized else "前往系统设置加载示例数据",
-            action_callback=_go_to_settings,
+            else "或者点击上方按钮开始你的第一个分析任务。"
         )
         return
 
