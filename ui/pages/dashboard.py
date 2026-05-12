@@ -119,18 +119,10 @@ def render_dashboard():
             },
         ])
 
-    # 空状态引导（未初始化 或 所有指标为 0）
-    show_empty = False
+    # 空状态引导（仅未初始化时显示配置提示）
     if not is_initialized or stats is None:
-        show_empty = True
-    elif all(v == 0 for v in stats.values()):
-        show_empty = True
-
-    if show_empty:
         divider()
 
-        # 使用 Streamlit 原生按钮，直接在主流程中处理点击逻辑
-        # 不依赖 callback 机制，避免静默异常问题
         if st.button(
             "前往系统设置",
             type="primary",
@@ -139,11 +131,24 @@ def render_dashboard():
             st.session_state.nav_target = "settings"
             st.rerun()
 
-        st.info(
-            "配置好 API Key 后，刷新页面即可看到数据概览和图表。"
-            if is_initialized
-            else "或者点击上方按钮开始你的第一个分析任务。"
-        )
+        st.info("请在「系统设置」中配置 API Key 后开始使用。")
+        return
+
+    # 已初始化但暂无数据 — 显示引导而非配置提示
+    if all(v == 0 for v in stats.values()):
+        divider()
+
+        st.info("🎉 系统已就绪！前往「内容分析」或「线索分析」开始你的第一个分析任务。")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📝 分析新内容", use_container_width=True, type="primary"):
+                st.session_state.nav_target = "content"
+                st.rerun()
+        with col2:
+            if st.button("👤 录入新线索", use_container_width=True, type="primary"):
+                st.session_state.nav_target = "lead"
+                st.rerun()
         return
 
     divider()
