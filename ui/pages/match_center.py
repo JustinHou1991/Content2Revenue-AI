@@ -171,14 +171,14 @@ class MatchCenterPage(MatchPage):
                         icon="&#10003;",
                     )
 
-                    for r in results:
+                    for idx, r in enumerate(results, 1):
                         lead_snap = r.get("lead_snapshot", {})
                         company = lead_snap.get("company", "未知")
                         industry = lead_snap.get("industry", "未知")
                         grade = lead_snap.get("lead_grade", "?")
 
                         grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
-                        title = f"{grade_icon} {grade}级 | {company}"
+                        title = f"**#{idx}** {grade_icon} {grade}级 | {company}"
                         if industry and industry != "未知":
                             title += f" ({industry})"
 
@@ -280,7 +280,7 @@ class MatchCenterPage(MatchPage):
         try:
             records = self._get_orchestrator().db.get_all_match_results(limit=10)
             if records:
-                for record in records:
+                for idx, record in enumerate(records, 1):
                     mr = record.get("match_result_json", {})
                     score = mr.get("overall_score", "N/A")
                     reason = mr.get("match_reason", "")
@@ -289,7 +289,8 @@ class MatchCenterPage(MatchPage):
                     content_snap = record.get("content_snapshot_json", {})
                     lead_snap = record.get("lead_snapshot_json", {})
 
-                    # 构建标题
+                    # 构建标题（带编号）
+                    match_no = f"#{idx}"
                     content_score = content_snap.get("content_score", "?")
                     hook = content_snap.get("hook_type", "")
                     category = content_snap.get("content_category", "")
@@ -308,8 +309,11 @@ class MatchCenterPage(MatchPage):
 
                     score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
                     created = record.get("created_at", "")[:10]
+                    match_id_short = record.get("id", "")[:8]
 
-                    with st.expander(f"{score_icon} 匹配度 {score}/10 | {created}"):
+                    with st.expander(f"**{match_no}** {score_icon} 匹配度 {score}/10 | {created}"):
+                        # 编号和ID标识
+                        st.caption(f"匹配ID: {match_id_short}... | 创建时间: {record.get('created_at', '未知')}")
                         # 双列：内容 vs 线索
                         col_a, col_b = st.columns(2)
                         with col_a:
