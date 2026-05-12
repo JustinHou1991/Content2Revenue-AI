@@ -39,11 +39,33 @@ class ContentAnalysisPage(AnalysisPage):
         )
 
     def _render_single_input(self):
-        """渲染单个脚本输入界面"""
+        """渲染单个脚本输入界面（支持文件上传）"""
         st.subheader("输入抖音脚本")
 
+        # 文件上传
+        uploaded_file = st.file_uploader(
+            "上传文件（支持 PDF、Word、TXT）",
+            type=["pdf", "docx", "doc", "txt", "md"],
+            key="content_single_file"
+        )
+
+        # 如果有文件上传，解析内容
+        file_text = ""
+        if uploaded_file is not None:
+            try:
+                from utils.file_parser import parse_file, extract_text_for_analysis
+                parse_result = parse_file(uploaded_file)
+                file_text = extract_text_for_analysis(parse_result, max_length=3000)
+                st.success(f"✅ 文件「{uploaded_file.name}」解析成功")
+            except Exception as e:
+                st.error(f"文件解析失败: {str(e)}")
+                st.info("支持的格式：PDF、Word(.docx)、TXT、Markdown")
+
+        # 文本输入框（文件内容自动填充）
+        default_text = file_text if file_text else ""
         script_text = render_text_area(
-            "粘贴脚本内容",
+            "粘贴脚本内容或直接编辑上传的文件内容",
+            value=default_text,
             placeholder="例：你是不是还在用传统方式获客？每天花500块投流，一个询盘都没有？...",
             height=200
         )
@@ -52,7 +74,7 @@ class ContentAnalysisPage(AnalysisPage):
 
         if analyze_btn:
             if not script_text:
-                callout("请先输入脚本内容", type="warning")
+                callout("请先输入脚本内容或上传文件", type="warning")
                 return
 
             with st.spinner("AI正在分析脚本..."):
@@ -64,12 +86,13 @@ class ContentAnalysisPage(AnalysisPage):
                     st.info("请检查API Key是否有效，或稍后重试。")
 
     def _render_batch_input(self):
-        """渲染批量导入界面"""
+        """渲染批量导入界面（支持 CSV/Excel）"""
         st.subheader("批量导入脚本")
 
         uploaded_file = st.file_uploader(
-            "上传CSV文件（支持自动识别'完整脚本'、'脚本'、'content'、'text'等列）",
-            type=["csv"],
+            "上传文件（支持 CSV、Excel .xlsx）",
+            type=["csv", "xlsx", "xls"],
+            key="content_batch_file"
         )
 
         # 字段映射状态管理
@@ -90,9 +113,13 @@ class ContentAnalysisPage(AnalysisPage):
                 validate_mapping_for_analysis,
             )
 
-            # 读取CSV并显示字段映射
+            # 读取CSV或Excel并显示字段映射
             if st.session_state.content_df is None:
-                st.session_state.content_df = pd.read_csv(uploaded_file)
+                file_type = uploaded_file.name.lower().split(".")[-1]
+                if file_type in ["xlsx", "xls"]:
+                    st.session_state.content_df = pd.read_excel(uploaded_file)
+                else:
+                    st.session_state.content_df = pd.read_csv(uploaded_file)
 
             df = st.session_state.content_df
 

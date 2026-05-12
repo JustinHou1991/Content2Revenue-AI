@@ -59,12 +59,13 @@ class LeadAnalysisPage(AnalysisPage):
                     st.info("请检查API Key是否有效，或稍后重试。")
 
     def _render_batch_input(self):
-        """渲染批量导入界面"""
+        """渲染批量导入界面（支持 CSV/Excel）"""
         st.subheader("批量导入线索")
 
         uploaded_file = st.file_uploader(
-            "上传CSV文件（支持自动识别'需求描述'、'对话记录'、'requirement'等列）",
-            type=["csv"],
+            "上传文件（支持 CSV、Excel .xlsx）",
+            type=["csv", "xlsx", "xls"],
+            key="lead_batch_file"
         )
 
         # 字段映射状态管理
@@ -84,9 +85,13 @@ class LeadAnalysisPage(AnalysisPage):
                 validate_mapping_for_analysis,
             )
 
-            # 读取CSV并显示字段映射
+            # 读取CSV或Excel并显示字段映射
             if st.session_state.lead_df is None:
-                st.session_state.lead_df = pd.read_csv(uploaded_file)
+                file_type = uploaded_file.name.lower().split(".")[-1]
+                if file_type in ["xlsx", "xls"]:
+                    st.session_state.lead_df = pd.read_excel(uploaded_file)
+                else:
+                    st.session_state.lead_df = pd.read_csv(uploaded_file)
 
             df = st.session_state.lead_df
 

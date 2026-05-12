@@ -11,6 +11,10 @@ pandas>=2.2.0
 openpyxl>=3.1.0
 reportlab>=4.0.0
 
+# === 文件解析 ===
+PyPDF2>=3.0.0
+python-docx>=0.8.11
+
 # === 配置与加密 ===
 pyyaml>=6.0
 cryptography>=41.0
