@@ -148,6 +148,38 @@ def main():
         _restore_custom_models()
         st.session_state.custom_models_restored = True
 
+    # 处理页面跳转（从其他页面通过按钮跳转过来）
+    nav_target = st.session_state.pop("nav_target", None)
+    if nav_target:
+        # 将 nav_target 映射到对应的 radio label
+        nav_map = {
+            "settings": "⚙️ 系统设置",
+            "content": "📝 内容分析",
+            "lead": "👤 线索分析",
+            "match": "🎯 匹配中心",
+            "strategy": "💡 策略建议",
+            "cost": "💰 成本分析",
+            "dashboard": "📊 仪表盘",
+        }
+        if nav_target in nav_map:
+            st.session_state.current_page = nav_map[nav_target]
+
+    # 确定当前页面
+    current_page = st.session_state.get("current_page", "📊 仪表盘")
+
+    # 页面选项列表
+    page_options = ["📊 仪表盘", "📝 内容分析", "👤 线索分析",
+                    "🎯 匹配中心", "💡 策略建议", "💰 成本分析", "⚙️ 系统设置"]
+
+    # 确保 current_page 在选项中
+    if current_page not in page_options:
+        current_page = "📊 仪表盘"
+
+    try:
+        default_index = page_options.index(current_page)
+    except ValueError:
+        default_index = 0
+
     # ============ 侧边栏（最先渲染，确保不被后续代码影响） ============
     with st.sidebar:
         st.markdown("## Content2Revenue AI")
@@ -156,11 +188,13 @@ def main():
         # 导航菜单
         page = st.radio(
             "导航菜单",
-            ["📊 仪表盘", "📝 内容分析", "👤 线索分析",
-             "🎯 匹配中心", "💡 策略建议", "💰 成本分析", "⚙️ 系统设置"],
+            page_options,
             label_visibility="collapsed",
-            index=0,
+            index=default_index,
         )
+
+        # 同步回 session_state
+        st.session_state.current_page = page
 
         st.markdown("---")
 
