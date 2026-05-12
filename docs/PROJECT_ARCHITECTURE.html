@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content2Revenue AI — 项目架构总结</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a28;--bg4:#222236;
+  --text:#e8e6e3;--text2:#9d9ba8;--text3:#6b6980;
+  --accent:#6366f1;--accent2:#818cf8;--accent-glow:rgba(99,102,241,.15);
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--pink:#ec4899;
+  --border:rgba(255,255,255,.06);--radius:12px;
+  --font-display:'Playfair Display',serif;
+  --font-body:'Noto Sans SC',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);line-height:1.7;overflow-x:hidden}
+::selection{background:var(--accent);color:#fff}
+
+/* === NAV === */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;backdrop-filter:blur(20px);background:rgba(10,10,15,.8);border-bottom:1px solid var(--border)}
+.nav-logo{font-family:var(--font-display);font-size:1.2rem;color:var(--accent2);letter-spacing:1px}
+.nav-logo span{color:var(--text2);font-family:var(--font-body);font-size:.8rem;margin-left:8px;font-weight:300}
+.nav-links{display:flex;gap:28px}
+.nav-links a{color:var(--text2);text-decoration:none;font-size:.85rem;font-weight:400;transition:color .3s}
+.nav-links a:hover{color:var(--accent2)}
+
+/* === HERO === */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-40%;right:-20%;width:800px;height:800px;background:radial-gradient(circle,rgba(99,102,241,.08) 0%,transparent 70%);pointer-events:none}
+.hero::after{content:'';position:absolute;bottom:-30%;left:-10%;width:600px;height:600px;background:radial-gradient(circle,rgba(16,185,129,.06) 0%,transparent 70%);pointer-events:none}
+.hero-inner{text-align:center;max-width:800px;padding:0 40px;position:relative;z-index:1}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border:1px solid var(--border);border-radius:100px;font-size:.78rem;color:var(--text2);margin-bottom:32px;background:var(--bg2)}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hero h1{font-family:var(--font-display);font-size:clamp(2.8rem,6vw,4.5rem);font-weight:900;line-height:1.1;margin-bottom:24px;background:linear-gradient(135deg,#e8e6e3 40%,var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:1.15rem;color:var(--text2);max-width:560px;margin:0 auto 40px;font-weight:300;line-height:1.8}
+.hero-stats{display:flex;justify-content:center;gap:48px;margin-top:48px}
+.hero-stat{text-align:center}
+.hero-stat .num{font-family:var(--font-display);font-size:2.4rem;font-weight:700;color:var(--accent2)}
+.hero-stat .label{font-size:.78rem;color:var(--text3);margin-top:4px}
+
+/* === SECTIONS === */
+section{padding:100px 40px;max-width:1200px;margin:0 auto}
+.section-label{font-size:.75rem;text-transform:uppercase;letter-spacing:3px;color:var(--accent);margin-bottom:12px;font-weight:500}
+.section-title{font-family:var(--font-display);font-size:clamp(1.8rem,3.5vw,2.6rem);font-weight:700;margin-bottom:16px;line-height:1.2}
+.section-desc{color:var(--text2);font-size:.95rem;max-width:640px;margin-bottom:48px;font-weight:300}
+
+/* === ARCH FLOW === */
+.arch-flow{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;padding:40px 0}
+.arch-node{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;text-align:center;min-width:160px;position:relative;transition:all .3s}
+.arch-node:hover{border-color:var(--accent);transform:translateY(-4px);box-shadow:0 12px 40px rgba(99,102,241,.1)}
+.arch-node .icon{font-size:1.6rem;margin-bottom:8px}
+.arch-node .name{font-size:.85rem;font-weight:500;margin-bottom:4px}
+.arch-node .desc{font-size:.72rem;color:var(--text3)}
+.arch-arrow{color:var(--text3);font-size:1.2rem;padding:0 8px;flex-shrink:0}
+
+/* === GRID CARDS === */
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:28px;transition:all .3s}
+.card:hover{border-color:rgba(99,102,241,.3);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.card-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:16px}
+.card-icon.purple{background:rgba(99,102,241,.12);color:var(--accent2)}
+.card-icon.green{background:rgba(16,185,129,.12);color:var(--green)}
+.card-icon.amber{background:rgba(245,158,11,.12);color:var(--amber)}
+.card-icon.cyan{background:rgba(6,182,212,.12);color:var(--cyan)}
+.card-icon.pink{background:rgba(236,72,153,.12);color:var(--pink)}
+.card-icon.red{background:rgba(239,68,68,.12);color:var(--red)}
+.card h3{font-size:1rem;font-weight:500;margin-bottom:8px}
+.card p{font-size:.82rem;color:var(--text2);line-height:1.7}
+
+/* === TECH STACK === */
+.tech-tag{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid var(--border);border-radius:100px;font-size:.8rem;color:var(--text2);background:var(--bg2);transition:all .3s;margin:4px}
+.tech-tag:hover{border-color:var(--accent);color:var(--accent2)}
+.tech-tag .lang{width:8px;height:8px;border-radius:50%}
+
+/* === TABLE === */
+.db-table{width:100%;border-collapse:collapse;margin-top:16px}
+.db-table th{text-align:left;padding:12px 16px;font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--text3);border-bottom:1px solid var(--border);font-weight:500}
+.db-table td{padding:12px 16px;font-size:.82rem;border-bottom:1px solid var(--border);color:var(--text2)}
+.db-table tr:hover td{background:var(--bg3)}
+.db-table .type{font-family:var(--font-mono);font-size:.75rem;color:var(--cyan)}
+.db-table .pk{color:var(--amber);font-size:.7rem;font-weight:500}
+
+/* === PATTERN LIST === */
+.pattern-item{display:flex;gap:20px;padding:24px 0;border-bottom:1px solid var(--border)}
+.pattern-item:last-child{border-bottom:none}
+.pattern-num{font-family:var(--font-display);font-size:2rem;font-weight:700;color:var(--accent);opacity:.4;min-width:48px;line-height:1}
+.pattern-info h3{font-size:1rem;font-weight:500;margin-bottom:6px}
+.pattern-info h3 code{font-family:var(--font-mono);font-size:.82rem;background:var(--bg3);padding:2px 8px;border-radius:4px;color:var(--accent2)}
+.pattern-info p{font-size:.82rem;color:var(--text2)}
+
+/* === HIGHLIGHTS === */
+.highlight-box{background:linear-gradient(135deg,var(--bg2),var(--bg3));border:1px solid var(--border);border-radius:var(--radius);padding:32px;margin-bottom:20px;position:relative;overflow:hidden}
+.highlight-box::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;border-radius:3px 0 0 3px}
+.highlight-box.purple::before{background:var(--accent)}
+.highlight-box.green::before{background:var(--green)}
+.highlight-box.amber::before{background:var(--amber)}
+.highlight-box.cyan::before{background:var(--cyan)}
+.highlight-box h3{font-size:1rem;font-weight:500;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.highlight-box p{font-size:.82rem;color:var(--text2);line-height:1.8}
+.highlight-box ul{list-style:none;padding:0;margin-top:12px}
+.highlight-box ul li{font-size:.82rem;color:var(--text2);padding:4px 0;padding-left:20px;position:relative}
+.highlight-box ul li::before{content:'→';position:absolute;left:0;color:var(--accent2)}
+
+/* === CODE BLOCK === */
+.code-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin:16px 0;font-family:var(--font-mono);font-size:.78rem;line-height:1.8;color:var(--text2);overflow-x:auto}
+.code-block .kw{color:var(--accent2)}
+.code-block .fn{color:var(--cyan)}
+.code-block .str{color:var(--green)}
+.code-block .cmt{color:var(--text3)}
+
+/* === METRICS ROW === */
+.metrics-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:32px 0}
+.metric-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center}
+.metric-box .val{font-family:var(--font-display);font-size:2rem;font-weight:700}
+.metric-box .val.purple{color:var(--accent2)}
+.metric-box .val.green{color:var(--green)}
+.metric-box .val.amber{color:var(--amber)}
+.metric-box .val.cyan{color:var(--cyan)}
+.metric-box .lbl{font-size:.75rem;color:var(--text3);margin-top:4px}
+
+/* === DIVIDER === */
+.section-divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:0 40px;max-width:1200px;margin-left:auto;margin-right:auto}
+
+/* === FOOTER === */
+.footer{text-align:center;padding:60px 40px;color:var(--text3);font-size:.8rem;border-top:1px solid var(--border)}
+.footer a{color:var(--accent2);text-decoration:none}
+
+/* === SCROLL ANIMATION === */
+.reveal{opacity:0;transform:translateY(30px);transition:all .8s cubic-bezier(.16,1,.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* === RESPONSIVE === */
+@media(max-width:768px){
+  .nav{padding:12px 20px}
+  .nav-links{display:none}
+  section{padding:60px 20px}
+  .hero-stats{gap:24px;flex-wrap:wrap}
+  .arch-flow{flex-direction:column}
+  .arch-arrow{transform:rotate(90deg)}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">C2R<span>AI Platform</span></div>
+  <div class="nav-links">
+    <a href="#overview">概览</a>
+    <a href="#architecture">架构</a>
+    <a href="#modules">核心模块</a>
+    <a href="#patterns">设计模式</a>
+    <a href="#highlights">技术亮点</a>
+    <a href="#database">数据库</a>
+    <a href="#stack">技术栈</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge"><span class="dot"></span> AI-Powered Content Intelligence Platform</div>
+    <h1>Content2Revenue AI</h1>
+    <p>AI 驱动的内容-商业转化智能平台。通过大语言模型分析抖音脚本内容与销售线索，实现语义匹配与智能策略生成，构建从内容创作到商业转化的完整闭环。</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">15+</div><div class="label">核心服务模块</div></div>
+      <div class="hero-stat"><div class="num">10</div><div class="label">设计模式应用</div></div>
+      <div class="hero-stat"><div class="num">8</div><div class="label">数据库表</div></div>
+      <div class="hero-stat"><div class="num">20+</div><div class="label">测试用例</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- OVERVIEW -->
+<section id="overview" class="reveal">
+  <div class="section-label">Project Overview</div>
+  <div class="section-title">项目定位与核心价值</div>
+  <div class="section-desc">面向内容营销团队的一站式 AI 分析平台，解决「内容生产 → 线索匹配 → 策略优化」全链路效率问题。</div>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-icon purple">📝</div>
+      <h3>内容分析引擎</h3>
+      <p>基于 LLM 的抖音脚本深度分析，提取 Hook 策略、情感曲线、叙事结构、CTA 设计等 15+ 维度特征，输出内容评分与改进建议。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon green">👤</div>
+      <h3>线索画像构建</h3>
+      <p>从销售线索数据中构建 360° 用户画像，包含行业、痛点、购买阶段、决策因素、意向评分等维度，自动分级（A/B+/B/C/D）。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon cyan">🎯</div>
+      <h3>语义匹配引擎</h3>
+      <p>内容与线索的五维度语义匹配（受众契合度、痛点相关性、阶段对齐度、CTA 适配度、情感共鸣度），支持批量并发匹配。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon amber">💡</div>
+      <h3>AI 策略顾问</h3>
+      <p>基于匹配结果生成可执行策略：内容策略、分发策略、转化预测、A/B 测试方案，形成「分析 → 匹配 → 策略 → 反馈」闭环。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon pink">📊</div>
+      <h3>成本监控体系</h3>
+      <p>实时追踪 Token 用量与 API 成本，按模型/时间维度统计分析，提供成本优化建议，支持数据导出。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon red">🔒</div>
+      <h3>安全与合规</h3>
+      <p>Prompt 注入防护、API Key 加密存储（Fernet + XOR 降级）、输入验证、审计日志、JWT 认证、多租户隔离。</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ARCHITECTURE -->
+<section id="architecture" class="reveal">
+  <div class="section-label">System Architecture</div>
+  <div class="section-title">系统架构与数据流</div>
+  <div class="section-desc">四层架构设计，由 Orchestrator 编排器串联完整的分析 Pipeline。</div>
+
+  <div class="metrics-row">
+    <div class="metric-box"><div class="val purple">UI</div><div class="lbl">表现层 · Streamlit</div></div>
+    <div class="metric-box"><div class="val green">Services</div><div class="lbl">服务层 · 业务逻辑</div></div>
+    <div class="metric-box"><div class="val amber">Core</div><div class="lbl">基础设施层</div></div>
+    <div class="metric-box"><div class="val cyan">Data</div><div class="lbl">数据层 · SQLite</div></div>
+  </div>
+
+  <div class="arch-flow">
+    <div class="arch-node">
+      <div class="icon">📝</div>
+      <div class="name">ContentAnalyzer</div>
+      <div class="desc">脚本特征提取</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-node">
+      <div class="icon">👤</div>
+      <div class="name">LeadAnalyzer</div>
+      <div class="desc">线索画像构建</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-node">
+      <div class="icon">🎯</div>
+      <div class="name">MatchEngine</div>
+      <div class="desc">语义匹配评分</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-node">
+      <div class="icon">💡</div>
+      <div class="name">StrategyAdvisor</div>
+      <div class="desc">策略生成</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-node">
+      <div class="icon">🔄</div>
+      <div class="name">Feedback Loop</div>
+      <div class="desc">反馈学习</div>
+    </div>
+  </div>
+
+  <div class="code-block">
+<span class="cmt"># 完整 Pipeline 调用示例</span>
+orchestrator = <span class="fn">Orchestrator</span>(model=<span class="str">"deepseek-chat"</span>, api_key=<span class="str">"sk-..."</span>)
+result = orchestrator.<span class="fn">full_pipeline</span>(
+    script_text=<span class="str">"抖音脚本文本..."</span>,
+    lead_data={<span class="str">"company"</span>: <span class="str">"某科技公司"</span>, <span class="str">"pain_points"</span>: <span class="str">"获客成本高"</span>}
+)
+<span class="cmt"># → 返回: content_result, lead_result, match_result, strategy_result</span>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- MODULES -->
+<section id="modules" class="reveal">
+  <div class="section-label">Core Modules</div>
+  <div class="section-title">核心服务模块详解</div>
+  <div class="section-desc">15 个核心服务模块，覆盖分析、匹配、策略、缓存、安全等完整能力。</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-icon purple">🧠</div>
+      <h3>BaseAnalyzer — 分析器基类</h3>
+      <p>模板方法模式定义标准 6 步分析流程：验证输入 → 构建 Prompt → 调用 LLM → 解析响应 → 校验输出 → 记录历史。内置 Prompt 注入防护（XML 标签包裹）、字段类型安全保证、批量分析（进度回调 + 取消事件）。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon green">🔗</div>
+      <h3>LLMClient — 统一 LLM 调用</h3>
+      <p>支持 10+ 模型（DeepSeek/通义千问/商汤/LongCat/自定义），内置 429/5xx 指数退避重试、JSON 自动修复、流式输出、批量并发控制、Token 成本追踪。运行时动态注册自定义 OpenAI 兼容模型。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon amber">📦</div>
+      <h3>Orchestrator — 流程编排器</h3>
+      <p>端到端 Pipeline 编排，串联四大分析器。支持单步调用和完整流水线，批量操作使用单事务保存保证一致性。仪表盘数据聚合优化（单连接查询）。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon cyan">💾</div>
+      <h3>Database — 数据持久化</h3>
+      <p>SQLite + WAL 模式，8 张核心表，JSON 字段自动解析。API Key 使用 Fernet 对称加密存储（不可用时 XOR 降级），支持自动迁移加密方式。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon pink">⚡</div>
+      <h3>ContentScoringModel — 规则评分</h3>
+      <p>基于历史数据的轻量级评分系统（无需 ML 训练），四维度加权评分：Hook(30%)、CTA(25%)、Structure(25%)、Emotion(20%)。支持反馈学习梯度调整评分基准。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon red">🧪</div>
+      <h3>ABTestEngine — A/B 测试框架</h3>
+      <p>5 种预定义变体模板（对照组/激进型/教育型/社交证明型/提问引导型）。双比例 Z 检验、Cohen's h 效应量、Bonferroni 校正、样本量计算。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon purple">📈</div>
+      <h3>ContentAttribution — 归因分析</h3>
+      <p>5 种归因模型：首次触点、最后触点、线性、时间衰减（7 天半衰期）、U 型。客户旅程追踪、多模型对比分析、渠道排名波动性计算。</p>
+    </div>
+    <div class="card">
+      <div class="card-icon green">🛡️</div>
+      <h3>安全基础设施</h3>
+      <p>JWT 认证、多租户隔离、API 限流、熔断器、连接池、输入验证（XSS/SQL注入/Prompt注入检测）、审计日志、事件总线、依赖注入容器。</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- DESIGN PATTERNS -->
+<section id="patterns" class="reveal">
+  <div class="section-label">Design Patterns</div>
+  <div class="section-title">设计模式应用</div>
+  <div class="section-desc">项目中系统性地运用了 10 种经典设计模式，确保代码的可维护性与扩展性。</div>
+
+  <div class="pattern-item">
+    <div class="pattern-num">01</div>
+    <div class="pattern-info">
+      <h3>模板方法模式 <code>BaseAnalyzer.analyze()</code></h3>
+      <p>定义分析的标准 6 步流程骨架，子类通过实现 <code>_build_prompt()</code> 和 <code>_parse_response()</code> 定制具体行为。同样应用于 UI 层的 <code>BasePage → AnalysisPage → MatchPage</code> 继承体系。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">02</div>
+    <div class="pattern-info">
+      <h3>策略模式 <code>AttributionModel / VariantTemplate</code></h3>
+      <p>归因引擎根据枚举选择不同权重计算策略（首次/最后/线性/时间衰减/U型）。A/B 测试引擎的变体模板对应不同的 Prompt 修改策略。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">03</div>
+    <div class="pattern-info">
+      <h3>工厂模式 <code>Orchestrator / LLMClient</code></h3>
+      <p>Orchestrator 作为工厂创建并组装四大分析器。LLMClient 根据模型名称从配置注册表中选择配置创建客户端，支持运行时动态扩展。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">04</div>
+    <div class="pattern-info">
+      <h3>编排器/中介者模式 <code>Orchestrator</code></h3>
+      <p>作为中间人协调四大分析器和数据库之间的交互，屏蔽内部复杂性，对外提供简洁的 <code>full_pipeline()</code> 接口。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">05</div>
+    <div class="pattern-info">
+      <h3>缓存模式 <code>CacheManager + LLMCache + @cached</code></h3>
+      <p>三层缓存体系：方法级装饰器缓存、LLM 调用级缓存（SHA256 键 + LRU + TTL）、配置级缓存。命中率实时可查。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">06</div>
+    <div class="pattern-info">
+      <h3>观察者模式 <code>EventBus + progress_callback</code></h3>
+      <p>事件总线实现发布-订阅机制。批量分析支持进度回调和取消事件，实现分析过程的实时反馈。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">07</div>
+    <div class="pattern-info">
+      <h3>注册表模式 <code>MODEL_CONFIGS + HealthChecker</code></h3>
+      <p>LLM 模型配置注册表支持静态定义 + 运行时动态注册。健康检查系统支持自定义检查项注册。</p>
+    </div>
+  </div>
+  <div class="pattern-item">
+    <div class="pattern-num">08</div>
+    <div class="pattern-info">
+      <h3>熔断器模式 <code>CircuitBreaker</code></h3>
+      <p>独立的熔断器实现，防止级联故障。结合 API 限流和连接池管理，保障系统在高负载下的稳定性。</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- HIGHLIGHTS -->
+<section id="highlights" class="reveal">
+  <div class="section-label">Technical Highlights</div>
+  <div class="section-title">核心技术亮点</div>
+  <div class="section-desc">从 LLM 调用优化到安全防护，每个细节都经过精心设计。</div>
+
+  <div class="highlight-box purple">
+    <h3>🤖 多模型支持 + 运行时扩展</h3>
+    <p>统一接口适配 10+ LLM 模型，支持运行时动态注册任意 OpenAI 兼容 API。不支持 json_mode 的模型自动降级为 Prompt 引导 + JSON 提取。</p>
+    <ul>
+      <li>内置模型：DeepSeek / 通义千问 / 商汤日日新 / LongCat</li>
+      <li>自定义模型：register_custom_model() 运行时注册</li>
+      <li>自动降级：json_mode 不可用时切换为 prompt 引导模式</li>
+    </ul>
+  </div>
+
+  <div class="highlight-box green">
+    <h3>🔒 Prompt 注入防护体系</h3>
+    <p>多层防护机制确保 LLM 调用安全，防止用户输入中的恶意指令干扰系统行为。</p>
+    <ul>
+      <li>正则检测：识别 "忽略指令"、"you are now" 等注入模式</li>
+      <li>XML 标签包裹：用 &lt;user_content&gt; 标签隔离用户输入</li>
+      <li>系统 Prompt 约束：明确指示 LLM 忽略用户输入中的指令</li>
+      <li>输入截断：max_length=5000 防止超长输入攻击</li>
+    </ul>
+  </div>
+
+  <div class="highlight-box amber">
+    <h3>🔄 JSON 自动修复机制</h3>
+    <p>LLM 返回的 JSON 经常格式不规范，系统实现了三级修复策略。</p>
+    <ul>
+      <li>第一级：从 Markdown 代码块中提取 JSON</li>
+      <li>第二级：正则清理（去除注释、尾逗号等）</li>
+      <li>第三级：调用 LLM 自身修复损坏的 JSON（_repair_json）</li>
+    </ul>
+  </div>
+
+  <div class="highlight-box cyan">
+    <h3>💰 成本监控与优化</h3>
+    <p>实时追踪每一次 LLM 调用的 Token 用量和成本，提供多维度分析和优化建议。</p>
+    <ul>
+      <li>线程安全的 Token 计数器（threading.Lock）</li>
+      <li>按模型定价自动计算成本</li>
+      <li>按日/周/月/模型维度统计分析</li>
+      <li>智能优化建议：高成本模型检测、高频操作检测</li>
+    </ul>
+  </div>
+
+  <div class="highlight-box purple">
+    <h3>🔐 加密存储（Fernet + XOR 降级）</h3>
+    <p>API Key 等敏感数据使用双层加密方案，确保安全性同时保证可用性。</p>
+    <ul>
+      <li>优先使用 cryptography.fernet 对称加密</li>
+      <li>不可用时自动降级到 XOR 加密</li>
+      <li>FERNET: 前缀标识加密类型，解密时自动识别</li>
+      <li>_migrate_to_fernet() 自动迁移旧数据</li>
+    </ul>
+  </div>
+
+  <div class="highlight-box green">
+    <h3>📊 A/B 测试统计引擎</h3>
+    <p>内置完整的统计检验工具，确保实验结论的科学性。</p>
+    <ul>
+      <li>双比例 Z 检验（pooled standard error）</li>
+      <li>Cohen's h 效应量计算</li>
+      <li>Bonferroni 多重比较校正</li>
+      <li>样本量计算（Abramowitz-Stegun 近似）</li>
+    </ul>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- DATABASE -->
+<section id="database" class="reveal">
+  <div class="section-label">Database Design</div>
+  <div class="section-title">数据库架构</div>
+  <div class="section-desc">SQLite + WAL 模式，8 张核心表覆盖全业务流程，JSON 字段自动解析。</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>📦 content_analysis</h3>
+      <p>内容分析结果。存储原始脚本、LLM 分析结果（Hook/CTA/评分等 15+ 维度）、使用模型。</p>
+    </div>
+    <div class="card">
+      <h3>👤 lead_analysis</h3>
+      <p>线索画像数据。存储原始线索、画像结果（行业/痛点/意向评分/等级）、使用模型。</p>
+    </div>
+    <div class="card">
+      <h3>🎯 match_results</h3>
+      <p>匹配结果。五维度评分（受众/痛点/阶段/CTA/情感）、内容与线索快照、关联 ID。</p>
+    </div>
+    <div class="card">
+      <h3>💡 strategy_advice</h3>
+      <p>策略建议。四大模块（内容策略/分发策略/转化预测/A/B测试）、关联匹配与内容线索。</p>
+    </div>
+    <div class="card">
+      <h3>⚙️ app_settings</h3>
+      <p>系统配置。Key-Value 结构，API Key 加密存储，支持自定义模型配置持久化。</p>
+    </div>
+    <div class="card">
+      <h3>📊 api_usage</h3>
+      <p>API 使用记录。Token 用量、成本、操作类型、关联内容/线索 ID，支持成本分析。</p>
+    </div>
+    <div class="card">
+      <h3>🔄 strategy_feedback</h3>
+      <p>策略反馈。是否采纳、实际转化率、备注，用于反馈学习闭环。</p>
+    </div>
+    <div class="card">
+      <h3>🧪 ab_tests</h3>
+      <p>A/B 测试。变体配置、测试结果、对照组标识，支持统计显著性检验。</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- TECH STACK -->
+<section id="stack" class="reveal">
+  <div class="section-label">Technology Stack</div>
+  <div class="section-title">技术栈</div>
+  <div class="section-desc">精选技术栈，兼顾开发效率与生产可靠性。</div>
+
+  <div style="margin-bottom:32px">
+    <h3 style="font-size:.9rem;color:var(--text2);margin-bottom:16px">核心框架</h3>
+    <span class="tech-tag"><span class="lang" style="background:#e34c26"></span>Streamlit 1.35+</span>
+    <span class="tech-tag"><span class="lang" style="background:#3776ab"></span>Python 3.11</span>
+    <span class="tech-tag"><span class="lang" style="background:#00d4aa"></span>OpenAI SDK</span>
+    <span class="tech-tag"><span class="lang" style="background:#06b6d4"></span>FastAPI</span>
+    <span class="tech-tag"><span class="lang" style="background:#e535ab"></span>Plotly</span>
+  </div>
+
+  <div style="margin-bottom:32px">
+    <h3 style="font-size:.9rem;color:var(--text2);margin-bottom:16px">数据与存储</h3>
+    <span class="tech-tag"><span class="lang" style="background:#003b57"></span>SQLite (WAL)</span>
+    <span class="tech-tag"><span class="lang" style="background:#150458"></span>Pandas</span>
+    <span class="tech-tag"><span class="lang" style="background:#185abd"></span>OpenPyXL</span>
+    <span class="tech-tag"><span class="lang" style="background:#d62728"></span>ReportLab</span>
+  </div>
+
+  <div style="margin-bottom:32px">
+    <h3 style="font-size:.9rem;color:var(--text2);margin-bottom:16px">安全与基础设施</h3>
+    <span class="tech-tag"><span class="lang" style="background:#646cff"></span>Cryptography (Fernet)</span>
+    <span class="tech-tag"><span class="lang" style="background:#00b4d8"></span>PyJWT</span>
+    <span class="tech-tag"><span class="lang" style="background:#375a7f"></span>Bcrypt</span>
+    <span class="tech-tag"><span class="lang" style="background:#e44d26"></span>HTTPX</span>
+    <span class="tech-tag"><span class="lang" style="background:#cb3837"></span>Docker</span>
+  </div>
+
+  <div>
+    <h3 style="font-size:.9rem;color:var(--text2);margin-bottom:16px">LLM 模型支持</h3>
+    <span class="tech-tag"><span class="lang" style="background:#4d6bfe"></span>DeepSeek Chat/Reasoner</span>
+    <span class="tech-tag"><span class="lang" style="background:#ff6a00"></span>通义千问 Turbo/Plus/Max</span>
+    <span class="tech-tag"><span class="lang" style="background:#10b981"></span>商汤 SenseChat/SenseNova</span>
+    <span class="tech-tag"><span class="lang" style="background:#8b5cf6"></span>自定义 OpenAI 兼容模型</span>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PROJECT STRUCTURE -->
+<section class="reveal">
+  <div class="section-label">Project Structure</div>
+  <div class="section-title">项目目录结构</div>
+  <div class="code-block" style="font-size:.72rem;line-height:1.9">
+content2revenue/
+├── app.py                     <span class="cmt"># Streamlit 主入口</span>
+├── config.py                  <span class="cmt"># 三级配置管理</span>
+├── services/                  <span class="cmt"># 核心服务层（15 模块）</span>
+│   ├── base_analyzer.py       <span class="cmt"># 分析器抽象基类（模板方法）</span>
+│   ├── content_analyzer.py    <span class="cmt"># 抖音脚本分析器</span>
+│   ├── lead_analyzer.py       <span class="cmt"># 线索画像分析器</span>
+│   ├── match_engine.py        <span class="cmt"># 语义匹配引擎</span>
+│   ├── strategy_advisor.py    <span class="cmt"># AI 策略顾问</span>
+│   ├── orchestrator.py        <span class="cmt"># 端到端编排器</span>
+│   ├── llm_client.py          <span class="cmt"># 统一 LLM 客户端</span>
+│   ├── llm_cache.py           <span class="cmt"># LLM 响应缓存</span>
+│   ├── database.py            <span class="cmt"># SQLite 持久化 + 加密</span>
+│   ├── scoring_model.py       <span class="cmt"># 规则评分模型</span>
+│   ├── ab_test_engine.py      <span class="cmt"># A/B 测试框架</span>
+│   ├── content_attribution.py <span class="cmt"># 多触点归因分析</span>
+│   ├── data_cleaner.py        <span class="cmt"># 数据清洗</span>
+│   ├── request_batcher.py     <span class="cmt"># 请求批处理器</span>
+│   └── health_check.py        <span class="cmt"># 系统健康检查</span>
+├── ui/                        <span class="cmt"># UI 层（Streamlit）</span>
+│   ├── base_page.py           <span class="cmt"># 页面基类体系</span>
+│   ├── styles.py              <span class="cmt"># 全局 CSS 样式系统</span>
+│   ├── components/            <span class="cmt"># 设计系统组件</span>
+│   └── pages/                 <span class="cmt"># 7 个功能页面</span>
+├── core/                      <span class="cmt"># 基础设施层（16 模块）</span>
+│   ├── auth_manager.py        <span class="cmt"># JWT 认证</span>
+│   ├── circuit_breaker.py     <span class="cmt"># 熔断器</span>
+│   ├── event_bus.py           <span class="cmt"># 事件总线</span>
+│   ├── di_container.py        <span class="cmt"># 依赖注入</span>
+│   └── ...
+├── utils/                     <span class="cmt"># 工具层</span>
+├── api/                       <span class="cmt"># RESTful API（FastAPI）</span>
+├── tests/                     <span class="cmt"># 20+ 测试用例</span>
+└── docs/                      <span class="cmt"># 项目文档</span>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<div class="footer">
+  <p>Content2Revenue AI · 项目架构总结 · <a href="https://github.com/JustinHou1991/Content2Revenue-AI" target="_blank">GitHub Repository</a></p>
+</div>
+
+<script>
+// Scroll reveal animation
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Smooth scroll for nav links
+document.querySelectorAll('.nav-links a').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+</script>
+</body>
+</html>
