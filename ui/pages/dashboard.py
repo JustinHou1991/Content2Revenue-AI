@@ -24,66 +24,117 @@ def render_dashboard():
         subtitle="实时追踪内容营销与线索转化核心指标",
     )
 
-    if not st.session_state.get("initialized"):
+    is_initialized = st.session_state.get("initialized", False)
+
+    # 未初始化时显示配置提示（但不阻断页面渲染）
+    if not is_initialized:
         callout(
             "请先在「系统设置」中配置API Key。配置好API Key后，系统会自动保存配置，刷新页面也不会丢失。",
             type="warning",
             icon="&#9888;",
         )
-        return
 
-    try:
-        data = st.session_state.orchestrator.get_dashboard_data()
-        stats = data["stats"]
-    except Exception as e:
-        callout(f"加载失败: {str(e)}", type="error", icon="&#10007;")
-        st.info("如果是首次使用，请先在「系统设置」中配置API Key并加载示例数据。")
-        return
+    # 加载业务数据（仅在已初始化时）
+    data = None
+    stats = None
+    if is_initialized:
+        try:
+            data = st.session_state.orchestrator.get_dashboard_data()
+            stats = data["stats"]
+        except Exception as e:
+            callout(f"加载失败: {str(e)}", type="error", icon="&#10007;")
+            st.info("如果是首次使用，请先在「系统设置」中配置API Key并加载示例数据。")
+            stats = None
 
-    # 核心指标卡片 - 使用新的 metric_row 组件
-    metric_row([
-        {
-            "title": "已分析内容",
-            "value": str(stats["content_count"]),
-            "subtitle": "篇内容",
-            "icon": "&#128221;",
-            "trend": "up",
-            "border_color": COLORS.get("brand_primary", "#6366F1"),
-        },
-        {
-            "title": "已分析线索",
-            "value": str(stats["lead_count"]),
-            "subtitle": "条线索",
-            "icon": "&#128100;",
-            "trend": "up",
-            "border_color": "#10B981",
-        },
-        {
-            "title": "匹配次数",
-            "value": str(stats["match_count"]),
-            "subtitle": "次匹配",
-            "icon": "&#127919;",
-            "trend": "up",
-            "border_color": "#F59E0B",
-        },
-        {
-            "title": "策略报告",
-            "value": str(stats["strategy_count"]),
-            "subtitle": "份报告",
-            "icon": "&#128200;",
-            "trend": "up",
-            "border_color": "#3B82F6",
-        },
-    ])
+    # ---- 核心指标卡片（始终渲染） ----
+    if stats is not None:
+        metric_row([
+            {
+                "title": "已分析内容",
+                "value": str(stats["content_count"]),
+                "subtitle": "篇内容",
+                "icon": "&#128221;",
+                "trend": "up",
+                "border_color": COLORS.get("brand_primary", "#6366F1"),
+            },
+            {
+                "title": "已分析线索",
+                "value": str(stats["lead_count"]),
+                "subtitle": "条线索",
+                "icon": "&#128100;",
+                "trend": "up",
+                "border_color": "#10B981",
+            },
+            {
+                "title": "匹配次数",
+                "value": str(stats["match_count"]),
+                "subtitle": "次匹配",
+                "icon": "&#127919;",
+                "trend": "up",
+                "border_color": "#F59E0B",
+            },
+            {
+                "title": "策略报告",
+                "value": str(stats["strategy_count"]),
+                "subtitle": "份报告",
+                "icon": "&#128200;",
+                "trend": "up",
+                "border_color": "#3B82F6",
+            },
+        ])
+    else:
+        # 未初始化 / 加载失败时显示占位卡片
+        metric_row([
+            {
+                "title": "已分析内容",
+                "value": "-",
+                "subtitle": "篇内容",
+                "icon": "&#128221;",
+                "trend": "neutral",
+                "border_color": COLORS.get("brand_primary", "#6366F1"),
+            },
+            {
+                "title": "已分析线索",
+                "value": "-",
+                "subtitle": "条线索",
+                "icon": "&#128100;",
+                "trend": "neutral",
+                "border_color": "#10B981",
+            },
+            {
+                "title": "匹配次数",
+                "value": "-",
+                "subtitle": "次匹配",
+                "icon": "&#127919;",
+                "trend": "neutral",
+                "border_color": "#F59E0B",
+            },
+            {
+                "title": "策略报告",
+                "value": "-",
+                "subtitle": "份报告",
+                "icon": "&#128200;",
+                "trend": "neutral",
+                "border_color": "#3B82F6",
+            },
+        ])
 
-    # 空状态引导
-    if all(v == 0 for v in stats.values()):
+    # 空状态引导（未初始化 或 所有指标为 0）
+    show_empty = False
+    if not is_initialized or stats is None:
+        show_empty = True
+    elif all(v == 0 for v in stats.values()):
+        show_empty = True
+
+    if show_empty:
         divider()
         empty_state(
             title="欢迎使用 Content2Revenue AI",
-            description="开始你的第一个分析任务，AI 将帮你优化内容变现策略。",
+            description="开始你的第一个分析任务，AI 将帮你优化内容变现策略。"
+            if is_initialized
+            else "请先前往「系统设置」配置 API Key，然后加载示例数据或开始你的第一个分析任务。",
             icon="&#128075;",
-            action_label="前往系统设置加载示例数据",
+            action_label="前往系统设置" if not is_initialized else "前往系统设置加载示例数据",
         )
         return
 
