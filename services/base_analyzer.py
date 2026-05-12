@@ -113,8 +113,10 @@ class BaseAnalyzer(ABC):
             ValueError: 输入数据无效时
             RuntimeError: LLM调用失败时
         """
-        # 验证并清洗输入
+        # 验证并清洗输入（防御性检查：确保子类重写返回了有效数据）
         input_data = self._validate_input(input_data)
+        if input_data is None:
+            raise ValueError("输入验证返回了空值，请检查数据格式")
 
         # 构建提示词
         user_prompt = self._build_prompt_from_input(input_data)

@@ -16,6 +16,11 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
+    menu_items={
+        "Get Help": None,
+        "Report a bug": None,
+        "About": "Content2Revenue AI — AI驱动的内容-商业转化智能平台",
+    },
 )
 
 # 初始化统一日志系统
@@ -126,6 +131,7 @@ def main():
     # ============ 侧边栏 ============
     with st.sidebar:
         st.markdown("## Content2Revenue AI")
+        st.caption("AI驱动的内容-商业转化智能平台")
         st.markdown("---")
 
         page = st.radio(
@@ -144,6 +150,57 @@ def main():
             st.success("✅ 系统已连接")
         else:
             st.warning("⚠️ 系统未连接")
+
+        st.markdown("---")
+
+        # 联系方式 / 商务合作
+        st.markdown("#### 🤝 联系我们")
+        st.markdown(
+            """
+            <div style="
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                padding: 16px;
+                border-radius: 12px;
+                border: 1px solid #2d2d44;
+                text-align: center;
+            ">
+                <div style="font-size: 13px; color: #a0a0b0; margin-bottom: 8px;">
+                    商务合作 & 技术咨询
+                </div>
+                <div style="font-size: 18px; font-weight: bold; color: #6366F1; margin-bottom: 4px;">
+                    📱 微信: JustinHou3199
+                </div>
+                <div style="font-size: 12px; color: #666;">
+                    欢迎交流产品需求与技术合作
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # 隐藏 Streamlit 默认元素
+        hide_streamlit_default = """
+        <style>
+            /* 隐藏右上角菜单按钮 */
+            [data-testid="stMainMenu"] {
+                visibility: hidden;
+            }
+            /* 隐藏底部 Made with Streamlit */
+            footer {
+                visibility: hidden;
+            }
+            footer:after {
+                content: "Content2Revenue AI © 2025";
+                visibility: visible;
+                display: block;
+                text-align: center;
+                color: #666;
+                font-size: 12px;
+                padding: 10px;
+            }
+        </style>
+        """
+        st.markdown(hide_streamlit_default, unsafe_allow_html=True)
 
     # ============ 页面路由 ============
     try:
