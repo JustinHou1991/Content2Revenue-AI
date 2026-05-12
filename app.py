@@ -169,12 +169,21 @@ def main():
             "⚙️ 系统设置": "settings",
         }
 
+        # 检查是否有导航目标（从其他页面跳转过来）
+        nav_target = st.session_state.get("nav_target")
+        default_index = 0
+        if nav_target and nav_target in nav_key_to_page:
+            default_index = list(nav_key_to_page.keys()).index(nav_target)
+            # 清空导航目标，避免重复跳转
+            st.session_state.nav_target = None
+
         # 使用默认的 st.radio 作为导航（保持原有行为）
         page = st.radio(
             "导航",
             list(nav_key_to_page.values()),
             label_visibility="collapsed",
             format_func=lambda x: x,
+            index=default_index,
             key="sidebar_nav",
         )
 

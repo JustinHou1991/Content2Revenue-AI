@@ -130,9 +130,9 @@ def render_dashboard():
         divider()
 
         def _go_to_settings():
-            # Streamlit radio 的值存储在 session_state[key] 中
-            # 直接设置 radio 的值为目标页面名称即可实现跳转
-            st.session_state.sidebar_nav = "⚙️ 系统设置"
+            # 使用独立的 nav_target 变量控制页面跳转
+            # 避免直接操作 widget 的 session_state key（会引发 StreamlitAPIException）
+            st.session_state.nav_target = "settings"
             st.rerun()
 
         empty_state(
