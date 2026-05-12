@@ -66,14 +66,11 @@ def _auto_init_orchestrator():
         from services.orchestrator import Orchestrator
         from services.llm_client import LLMClient
 
-        # 使用固化默认配置
         model = DEFAULT_MODEL
         api_key = DEFAULT_API_KEY
-        logger.info("尝试初始化: model=%s", model)
 
-        # 验证模型配置是否存在
         if model not in LLMClient.MODEL_CONFIGS:
-            st.error(f"模型 {model} 不在 MODEL_CONFIGS 中")
+            logger.warning("模型 %s 不在支持列表中", model)
             st.session_state.initialized = False
             return False
 
@@ -82,11 +79,11 @@ def _auto_init_orchestrator():
         return True
     except Exception as e:
         import traceback
-        st.error(f"初始化失败: {str(e)}")
-        with st.expander("调试信息"):
-            st.code(traceback.format_exc())
-        logger.error("初始化 Orchestrator 失败: %s", e, exc_info=True)
+        err_trace = traceback.format_exc()
+        logger.error("初始化失败: %s", e, exc_info=True)
+        # 用 st.exception 显示详细错误
         st.session_state.initialized = False
+        st.exception(e)
         return False
 
 
@@ -172,8 +169,11 @@ def main():
             from ui.pages.settings import render_settings
             render_settings()
     except Exception as e:
+        import traceback
         logger.error("页面渲染异常: %s", e, exc_info=True)
         st.error(f"页面加载出错: {_safe_error_message(e)}")
+        with st.expander("查看错误详情"):
+            st.code(traceback.format_exc())
 
 
 if __name__ == "__main__":
