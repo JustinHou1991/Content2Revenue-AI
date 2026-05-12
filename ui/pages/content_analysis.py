@@ -268,9 +268,13 @@ class ContentAnalysisPage(AnalysisPage):
                     break
 
                 try:
-                    single_result = self._get_orchestrator().analyze_content(
-                        script["script_text"]
+                    # 传入唯一的 script_id 确保每条结果独立保存
+                    single_result = self._get_orchestrator().content_analyzer.analyze(
+                        script_text=script["script_text"],
+                        script_id=script["script_id"],
                     )
+                    # 保存到数据库
+                    self._get_orchestrator().db.save_content_analysis(single_result)
                     results.append({
                         "success": True,
                         "index": i,
@@ -310,19 +314,6 @@ class ContentAnalysisPage(AnalysisPage):
                     type="success",
                     icon="&#10003;",
                 )
-
-            # 保存结果到数据库
-            saved_count = 0
-            for r in results:
-                if r.get("success"):
-                    try:
-                        self._get_orchestrator().db.save_content_analysis(r["data"])
-                        saved_count += 1
-                    except Exception as e:
-                        st.warning(f"保存结果失败: {e}")
-
-            if saved_count > 0:
-                st.info(f"已保存 {saved_count} 条分析结果到数据库")
 
             # 展示结果
             divider()

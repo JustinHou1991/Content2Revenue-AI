@@ -275,9 +275,13 @@ class LeadAnalysisPage(AnalysisPage):
                     break
 
                 try:
-                    single_result = self._get_orchestrator().analyze_lead(
-                        lead["lead_data"]
+                    # 传入唯一 lead_id 确保每条结果独立保存
+                    single_result = self._get_orchestrator().lead_analyzer.analyze(
+                        lead_data=lead["lead_data"],
+                        lead_id=lead.get("lead_id"),
                     )
+                    # 保存到数据库
+                    self._get_orchestrator().db.save_lead_analysis(single_result)
                     results.append({
                         "success": True,
                         "index": i,
@@ -317,19 +321,6 @@ class LeadAnalysisPage(AnalysisPage):
                     type="success",
                     icon="&#10003;",
                 )
-
-            # 保存结果到数据库
-            saved_count = 0
-            for r in results:
-                if r.get("success"):
-                    try:
-                        self._get_orchestrator().db.save_lead_analysis(r["data"])
-                        saved_count += 1
-                    except Exception as e:
-                        st.warning(f"保存结果失败: {e}")
-
-            if saved_count > 0:
-                st.info(f"已保存 {saved_count} 条分析结果到数据库")
 
             # 展示结果
             divider()
