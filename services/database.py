@@ -2,7 +2,30 @@
 数据库模块 - SQLite数据持久化
 """
 
+import os
 import sqlite3
+
+
+def _get_default_db_path() -> str:
+    """获取默认数据库路径（支持 Streamlit Cloud 持久化）
+
+    优先级：
+    1. 环境变量 C2R_DB_PATH（用户可自定义）
+    2. Streamlit Cloud 持久化目录 /mount/data/
+    3. 本地开发目录 data/
+    """
+    # 1. 环境变量优先
+    env_path = os.environ.get("C2R_DB_PATH", "")
+    if env_path:
+        return env_path
+
+    # 2. Streamlit Cloud 持久化目录
+    cloud_data_dir = "/mount/data"
+    if os.path.isdir(cloud_data_dir):
+        return os.path.join(cloud_data_dir, "c2r.db")
+
+    # 3. 本地开发
+    return "data/c2r.db"
 import json
 import logging
 import os
@@ -56,13 +79,15 @@ def generate_uuid() -> str:
 class Database:
     """SQLite数据库管理器"""
 
-    def __init__(self, db_path: str = "data/c2r.db"):
+    def __init__(self, db_path: str = ""):
         """
         初始化数据库
 
         Args:
-            db_path: 数据库文件路径
+            db_path: 数据库文件路径（默认自动检测持久化路径）
         """
+        if not db_path:
+            db_path = _get_default_db_path()
         self.db_path = db_path
         # 确保数据库文件所在目录存在
         db_dir = os.path.dirname(db_path)

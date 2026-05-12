@@ -23,7 +23,7 @@ class Orchestrator:
         self,
         model: str = "deepseek-chat",
         api_key: Optional[str] = None,
-        db_path: str = "data/c2r.db",
+        db_path: str = "",
     ):
         """
         初始化编排器
