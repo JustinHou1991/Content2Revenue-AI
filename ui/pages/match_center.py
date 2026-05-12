@@ -146,10 +146,53 @@ class MatchCenterPage(MatchPage):
                 for record in records:
                     mr = record.get("match_result_json", {})
                     score = mr.get("overall_score", "N/A")
-                    reason = mr.get("match_reason", "")[:80] + "..."
+                    reason = mr.get("match_reason", "")
 
-                    with st.expander(f"匹配度 {score}/10 | {record['created_at'][:10]}"):
+                    # 提取内容和线索信息
+                    content_snap = record.get("content_snapshot_json", {})
+                    lead_snap = record.get("lead_snapshot_json", {})
+                    content_text = content_snap.get("raw_text", "")[:60]
+                    company = lead_snap.get("company", lead_snap.get("公司名称", "未知"))
+                    industry = lead_snap.get("industry", "未知")
+
+                    # 标题：评分 + 公司 + 内容摘要
+                    title = f"匹配度 {score}/10 | {company}"
+                    if industry and industry != "未知":
+                        title += f" ({industry})"
+
+                    # 评分颜色
+                    score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
+
+                    with st.expander(f"{score_icon} {title}"):
+                        # 内容和线索来源
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.markdown("**📝 匹配内容**")
+                            st.caption(content_text + "..." if len(content_snap.get("raw_text", "")) > 60 else content_text)
+                        with col_b:
+                            st.markdown("**👤 匹配线索**")
+                            st.write(f"公司: {company}")
+                            if industry and industry != "未知":
+                                st.write(f"行业: {industry}")
+
+                        st.markdown("---")
+
+                        # 完整匹配原因（不截断）
+                        st.markdown("**匹配分析**")
                         st.write(reason)
+
+                        # 维度评分
+                        ds = mr.get("dimension_scores", {})
+                        if ds:
+                            st.markdown("**维度评分**")
+                            self._render_dimension_scores(ds, columns=5)
+
+                        # 匹配建议
+                        suggestion = mr.get("suggestion", "")
+                        if suggestion:
+                            st.markdown("---")
+                            st.markdown("**💡 建议**")
+                            st.write(suggestion)
             else:
                 empty_state(
                     title="暂无匹配记录",
