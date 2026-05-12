@@ -66,11 +66,14 @@ class LeadAnalyzer(BaseAnalyzer):
         input_data = {"lead_data": lead_data, "lead_id": lead_id}
         return super().analyze(input_data)
 
-    def _validate_input(self, input_data: Any) -> None:
+    def _validate_input(self, input_data: Any) -> Any:
         """验证输入数据
 
         Args:
             input_data: 输入数据字典
+
+        Returns:
+            验证后的输入数据
 
         Raises:
             ValueError: 线索数据为空时
@@ -80,6 +83,7 @@ class LeadAnalyzer(BaseAnalyzer):
         lead_data = input_data.get("lead_data")
         if not lead_data:
             raise ValueError("线索数据不能为空")
+        return input_data
 
     def _build_prompt_from_input(self, input_data: Any) -> str:
         """根据输入数据构建提示词

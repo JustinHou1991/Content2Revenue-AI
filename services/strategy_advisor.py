@@ -75,11 +75,14 @@ class StrategyAdvisor(BaseAnalyzer):
         }
         return super().analyze(input_data)
 
-    def _validate_input(self, input_data: Any) -> None:
+    def _validate_input(self, input_data: Any) -> Any:
         """验证输入数据
 
         Args:
             input_data: 输入数据字典
+
+        Returns:
+            验证后的输入数据
 
         Raises:
             ValueError: 匹配结果为空时
@@ -89,6 +92,7 @@ class StrategyAdvisor(BaseAnalyzer):
         match_result = input_data.get("match_result")
         if not match_result:
             raise ValueError("匹配结果不能为空")
+        return input_data
 
     def _build_prompt_from_input(self, input_data: Any) -> str:
         """根据输入数据构建提示词

@@ -64,11 +64,14 @@ class ContentAnalyzer(BaseAnalyzer):
         input_data = {"script_text": script_text, "script_id": script_id}
         return super().analyze(input_data)
 
-    def _validate_input(self, input_data: Any) -> None:
+    def _validate_input(self, input_data: Any) -> Any:
         """验证输入数据
 
         Args:
             input_data: 输入数据字典
+
+        Returns:
+            验证后的输入数据
 
         Raises:
             ValueError: 脚本内容为空时
@@ -78,6 +81,7 @@ class ContentAnalyzer(BaseAnalyzer):
         script_text = input_data.get("script_text", "")
         if not script_text or not script_text.strip():
             raise ValueError("脚本内容不能为空")
+        return input_data
 
     def _build_prompt_from_input(self, input_data: Any) -> str:
         """根据输入数据构建提示词
