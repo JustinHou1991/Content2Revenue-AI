@@ -96,6 +96,15 @@ class LLMClient:
             "cost_per_1k_input": 0.0015,
             "cost_per_1k_output": 0.0045,
         },
+        # ===== LongCat =====
+        "LongCat-Flash-Thinking-2601": {
+            "base_url": "https://api.longcat.chat/openai",
+            "env_key": "LONGCAT_API_KEY",
+            "max_tokens_default": 8192,
+            "supports_json_mode": True,
+            "cost_per_1k_input": 0.001,
+            "cost_per_1k_output": 0.002,
+        },
     }
 
     def __init__(self, model: str = "deepseek-chat", api_key: Optional[str] = None):

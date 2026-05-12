@@ -67,6 +67,7 @@ def render_settings():
                 "sensechat-turbo",
                 "sensenova-v6-pro",
                 "sensenova-v6-turbo",
+                "LongCat-Flash-Thinking-2601",
             ],
             index=(
                 [
@@ -79,6 +80,7 @@ def render_settings():
                     "sensechat-turbo",
                     "sensenova-v6-pro",
                     "sensenova-v6-turbo",
+                    "LongCat-Flash-Thinking-2601",
                 ].index(saved_model)
                 if saved_model
                 in [
@@ -91,6 +93,7 @@ def render_settings():
                     "sensechat-turbo",
                     "sensenova-v6-pro",
                     "sensenova-v6-turbo",
+                    "LongCat-Flash-Thinking-2601",
                 ]
                 else 0
             ),
@@ -104,6 +107,7 @@ def render_settings():
                 "sensechat-turbo": "商汤 SenseChat-Turbo（超低价，适合批量）",
                 "sensenova-v6-pro": "商汤 SenseNova V6 Pro（多模态，双冠军）",
                 "sensenova-v6-turbo": "商汤 SenseNova V6 Turbo（多模态，性价比）",
+                "LongCat-Flash-Thinking-2601": "LongCat Flash Thinking（深度推理）",
             }.get(x, x),
         )
 
