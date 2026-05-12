@@ -105,15 +105,23 @@ class MatchCenterPage(MatchPage):
             st.info("提示：你可以在「系统设置」中点击「加载示例数据」快速体验。")
             return
 
-        # 构建选项
+        # 构建选项（优化：显示更多关键信息）
         content_options = {}
         for c in contents:
             analysis = c.get("analysis_json", {})
             raw_text = c.get("raw_text", "")
-            # 显示脚本前30字 + 评分
-            preview = raw_text[:30].replace("\n", " ") + "..." if len(raw_text) > 30 else raw_text
+            preview = raw_text[:40].replace("\n", " ") + "..." if len(raw_text) > 40 else raw_text
             score = analysis.get("content_score", "?")
-            label = f"[{score}/10] {preview}"
+            hook = analysis.get("hook_type", "")
+            category = analysis.get("content_category", "")
+            # 格式：[评分] Hook类型·分类 | 脚本前40字
+            info_parts = []
+            if hook and hook != "未知":
+                info_parts.append(hook)
+            if category and category != "未知":
+                info_parts.append(category)
+            info_str = "·".join(info_parts)
+            label = f"[{score}/10] {info_str} | {preview}" if info_str else f"[{score}/10] {preview}"
             content_options[label] = c["id"]
 
         lead_options = {}
@@ -123,7 +131,14 @@ class MatchCenterPage(MatchPage):
             company = raw.get("company", raw.get("公司名称", "未知"))
             grade = profile.get("lead_grade", "?")
             industry = profile.get("industry", "未知")
-            label = f"[{grade}级] {company} ({industry})"
+            intent = profile.get("intent_level", "?")
+            pains = profile.get("pain_points", [])
+            pain_str = pains[0][:15] + "..." if pains else ""
+            # 格式：[等级] 公司·行业(意向X/10) | 痛点摘要
+            info = f"{company}·{industry}" if industry and industry != "未知" else company
+            label = f"[{grade}级] {info} (意向{intent}/10)"
+            if pain_str:
+                label += f" | {pain_str}"
             lead_options[label] = lead["id"]
 
         col1, col2 = st.columns(2)
@@ -235,14 +250,35 @@ class MatchCenterPage(MatchPage):
 
         divider()
 
-        # 内容和线索详情（双列）
+        # 内容和线索摘要卡片（对比视图）
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown("#### 📝 匹配的内容")
-            _render_content_snapshot(content_snap)
+            # 一句话摘要
+            hook = content_snap.get("hook_type", "未知")
+            category = content_snap.get("content_category", "未知")
+            c_score = content_snap.get("content_score", "?")
+            audience = content_snap.get("target_audience", "未知")
+            tags = content_snap.get("topic_tags", [])
+            st.info(f"**{hook}** · {category} | 评分 {c_score}/10 | 受众: {audience}")
+            if tags:
+                st.caption(f"话题: {', '.join(tags)}")
+            # 详细信息折叠
+            with st.expander("查看完整内容画像"):
+                _render_content_snapshot(content_snap)
         with col_b:
             st.markdown("#### 👤 匹配的线索")
-            _render_lead_snapshot(lead_snap)
+            industry = lead_snap.get("industry", "未知")
+            stage = lead_snap.get("company_stage", "未知")
+            l_score = lead_snap.get("lead_score", "?")
+            grade = lead_snap.get("lead_grade", "?")
+            intent = lead_snap.get("intent_level", "?")
+            pains = lead_snap.get("pain_points", [])
+            st.info(f"**{industry}** · {stage} | {grade}级 {l_score}/100 | 意向 {intent}/10")
+            if pains:
+                st.caption(f"痛点: {', '.join(pains[:3])}")
+            with st.expander("查看完整线索画像"):
+                _render_lead_snapshot(lead_snap)
 
         divider()
 

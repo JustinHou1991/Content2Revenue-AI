@@ -54,14 +54,31 @@ class StrategyPage(BasePage):
             callout("暂无匹配记录，请先去「匹配中心」进行内容-线索匹配", type="info")
             return
 
-        # 构建选项
+        # 构建选项（优化：显示内容和线索关键信息）
         match_options = {}
         for m in match_results:
             mr = m.get("match_result_json", {})
             score = mr.get("overall_score", "?")
             cs = m.get("content_snapshot_json", {})
             ls = m.get("lead_snapshot_json", {})
-            label = f"[{score}/10] {cs.get('industry', ls.get('industry', '未知'))} | {m['created_at'][:10]}"
+
+            # 内容信息
+            c_hook = cs.get("hook_type", "")
+            c_category = cs.get("content_category", "")
+            c_parts = []
+            if c_hook and c_hook != "未知":
+                c_parts.append(c_hook)
+            if c_category and c_category != "未知":
+                c_parts.append(c_category)
+            c_info = "·".join(c_parts) if c_parts else "未知内容"
+
+            # 线索信息
+            l_industry = ls.get("industry", "未知")
+            l_grade = ls.get("lead_grade", "?")
+            l_intent = ls.get("intent_level", "?")
+            l_info = f"{l_grade}级·{l_industry}(意向{l_intent})" if l_industry != "未知" else f"{l_grade}级"
+
+            label = f"[匹配{score}/10] 📝{c_info} ↔ 👤{l_info} | {m['created_at'][:10]}"
             match_options[label] = m["id"]
 
         selected = st.selectbox("选择匹配结果", list(match_options.keys()))
@@ -86,6 +103,47 @@ class StrategyPage(BasePage):
         strategy = result.get("strategy", {})
 
         callout("策略建议已生成！", type="success", icon="&#10003;")
+
+        # 顶部：内容和线索摘要（让用户知道是为谁生成的策略）
+        match_id = result.get("match_id", "")
+        content_id = result.get("content_id", "")
+        lead_id = result.get("lead_id", "")
+
+        # 尝试获取匹配的快照信息
+        content_snap = {}
+        lead_snap = {}
+        try:
+            match_data = self._get_orchestrator().db.get_match_result(match_id) if match_id else None
+            if match_data:
+                content_snap = match_data.get("content_snapshot_json", {})
+                lead_snap = match_data.get("lead_snapshot_json", {})
+        except Exception:
+            pass
+
+        if content_snap or lead_snap:
+            divider()
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("**📝 策略针对的内容**")
+                c_hook = content_snap.get("hook_type", "未知")
+                c_cat = content_snap.get("content_category", "未知")
+                c_score = content_snap.get("content_score", "?")
+                c_audience = content_snap.get("target_audience", "未知")
+                c_tags = content_snap.get("topic_tags", [])
+                st.info(f"**{c_hook}** · {c_cat} | 评分 {c_score}/10 | 受众: {c_audience}")
+                if c_tags:
+                    st.caption(f"话题: {', '.join(c_tags)}")
+            with col_b:
+                st.markdown("**👤 策略针对的线索**")
+                l_industry = lead_snap.get("industry", "未知")
+                l_stage = lead_snap.get("company_stage", "未知")
+                l_grade = lead_snap.get("lead_grade", "?")
+                l_intent = lead_snap.get("intent_level", "?")
+                l_pains = lead_snap.get("pain_points", [])
+                st.info(f"**{l_industry}** · {l_stage} | {l_grade}级 | 意向 {l_intent}/10")
+                if l_pains:
+                    st.caption(f"痛点: {', '.join(l_pains[:3])}")
+            divider()
 
         # 内容策略
         cs = strategy.get("content_strategy", {})
