@@ -869,6 +869,15 @@ class Database:
                 (key, value, now),
             )
 
+    def delete_setting(self, key: str) -> bool:
+        """删除指定配置项"""
+        with self._get_conn() as conn:
+            result = conn.execute(
+                "DELETE FROM app_settings WHERE key = ?",
+                (key,),
+            ).rowcount
+            return result > 0
+
     # ===== API 使用记录 & 成本统计 =====
 
     def save_api_usage(self, record: Dict[str, Any]) -> str:

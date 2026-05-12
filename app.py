@@ -30,6 +30,51 @@ except Exception:
 
 logger = get_logger(__name__)
 
+
+def _restore_custom_models():
+    """从数据库恢复自定义模型配置"""
+    try:
+        from services.database import Database
+        from services.llm_client import register_custom_model
+
+        db = Database()
+        # 查找所有自定义模型元数据
+        rows = db.query(
+            "SELECT key, value FROM app_settings WHERE key LIKE 'CUSTOM_MODEL_%_BASE_URL'"
+        )
+        for row in rows:
+            key = row["key"]
+            base_url = row["value"]
+            # 解析模型名称：从 CUSTOM_MODEL_{name}_BASE_URL 提取 name
+            # 注意：名称中可能包含下划线，所以用 endswith 判断
+            if not key.startswith("CUSTOM_MODEL_") or not key.endswith("_BASE_URL"):
+                continue
+            # 提取 name: CUSTOM_MODEL_{name}_BASE_URL
+            middle = key[len("CUSTOM_MODEL_"):-len("_BASE_URL")]
+            if not middle:
+                continue
+
+            model_id = db.get_setting(f"CUSTOM_MODEL_{middle}_MODEL_ID", "")
+            api_key = db.get_setting(f"CUSTOM_MODEL_{middle}_API_KEY", "")
+            if base_url and model_id and api_key:
+                try:
+                    model_key = f"custom_{middle}"
+                    register_custom_model(
+                        model_name=model_key,
+                        base_url=base_url,
+                        api_key=api_key,
+                    )
+                    logger.info("已恢复自定义模型: %s", middle)
+                except Exception as e:
+                    logger.warning("恢复自定义模型 %s 失败: %s", middle, e)
+        db.close()
+    except Exception as e:
+        logger.debug("恢复自定义模型失败（不影响运行）: %s", e)
+
+
+# 启动时恢复自定义模型
+_restore_custom_models()
+
 # 初始化session state
 if "orchestrator" not in st.session_state:
     st.session_state.orchestrator = None

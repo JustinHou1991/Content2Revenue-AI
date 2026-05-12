@@ -18,6 +18,43 @@ from services.llm_cache import LLMCache
 logger = logging.getLogger(__name__)
 
 
+# 全局自定义模型注册表（支持运行时动态添加）
+_custom_model_configs: Dict[str, Dict[str, Any]] = {}
+
+
+def register_custom_model(
+    model_name: str,
+    base_url: str,
+    api_key: str,
+    supports_json_mode: bool = True,
+    max_tokens_default: int = 4096,
+    cost_per_1k_input: float = 0.001,
+    cost_per_1k_output: float = 0.002,
+) -> None:
+    """
+    注册自定义模型配置（支持任意 OpenAI 兼容 API）
+
+    Args:
+        model_name:       模型名称，如 "my-gpt-4"
+        base_url:        API base URL，如 "https://api.openai.com/v1"
+        api_key:         API 密钥
+        supports_json_mode: 是否支持 response_format=json_object
+        max_tokens_default: 默认最大输出 token 数
+        cost_per_1k_input:  每千输入 token 成本（美元）
+        cost_per_1k_output: 每千输出 token 成本（美元）
+    """
+    _custom_model_configs[model_name] = {
+        "base_url": base_url.rstrip("/"),
+        "api_key": api_key,
+        "max_tokens_default": max_tokens_default,
+        "supports_json_mode": supports_json_mode,
+        "cost_per_1k_input": cost_per_1k_input,
+        "cost_per_1k_output": cost_per_1k_output,
+        "_is_custom": True,
+    }
+    logger.info("已注册自定义模型: %s (base_url=%s)", model_name, base_url)
+
+
 class LLMClient:
     """统一的LLM调用客户端"""
 
@@ -112,17 +149,24 @@ class LLMClient:
         初始化LLM客户端
 
         Args:
-            model: 模型名称，如 "deepseek-chat", "qwen-plus"
-            api_key: API密钥，如果不传则从环境变量读取
+            model: 模型名称，支持内置模型或已注册的自定义模型
+            api_key: API密钥；自定义模型会忽略此参数（使用注册时提供的密钥）
         """
-        if model not in self.MODEL_CONFIGS:
+        # 优先查找自定义模型，其次查找内置模型
+        if model in _custom_model_configs:
+            self.config = _custom_model_configs[model]
+            self._is_custom = True
+        elif model in self.MODEL_CONFIGS:
+            self.config = self.MODEL_CONFIGS[model]
+            self._is_custom = False
+        else:
+            all_models = list(self.MODEL_CONFIGS.keys()) + list(_custom_model_configs.keys())
             raise ValueError(
                 f"不支持的模型: {model}。"
-                f"支持的模型: {list(self.MODEL_CONFIGS.keys())}"
+                f"支持的模型: {all_models}"
             )
 
         self.model: str = model
-        self.config: Dict[str, Any] = self.MODEL_CONFIGS[model]
 
         # Token 计数与成本追踪
         self._total_input_tokens: int = 0
@@ -130,12 +174,14 @@ class LLMClient:
         self._total_calls: int = 0
         self._lock = threading.Lock()
 
-        # API Key：优先使用传入的，否则从环境变量读取
-        key = api_key or os.environ.get(self.config["env_key"])
+        # API Key：自定义模型使用注册时存储的 key；内置模型从环境变量读取
+        if self._is_custom:
+            key = self.config["api_key"]
+        else:
+            key = api_key or os.environ.get(self.config["env_key"])
         if not key:
-            raise ValueError(
-                f"请设置环境变量 {self.config['env_key']} " f"或传入api_key参数"
-            )
+            env_hint = self.config.get("env_key", "API_KEY")
+            raise ValueError(f"请设置环境变量 {env_hint} 或传入api_key参数")
 
         self.client = OpenAI(
             api_key=key,
@@ -152,6 +198,32 @@ class LLMClient:
             self.model,
             self.config["base_url"],
         )
+
+    # ===== 模型管理 =====
+
+    @staticmethod
+    def get_builtin_models() -> List[str]:
+        """获取所有内置模型名称"""
+        return list(LLMClient.MODEL_CONFIGS.keys())
+
+    @staticmethod
+    def get_custom_models() -> List[str]:
+        """获取所有已注册的自定义模型名称"""
+        return list(_custom_model_configs.keys())
+
+    @staticmethod
+    def get_all_models() -> List[str]:
+        """获取所有可用模型名称（内置 + 自定义）"""
+        return LLMClient.get_builtin_models() + LLMClient.get_custom_models()
+
+    @staticmethod
+    def remove_custom_model(model_name: str) -> bool:
+        """移除已注册的自定义模型"""
+        if model_name in _custom_model_configs:
+            del _custom_model_configs[model_name]
+            logger.info("已移除自定义模型: %s", model_name)
+            return True
+        return False
 
     # ===== Token 与成本追踪 =====
 

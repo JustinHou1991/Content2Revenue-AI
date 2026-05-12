@@ -14,6 +14,32 @@ from ui.components.design_system import (
 )
 
 
+def _get_all_model_options():
+    """获取所有可用模型选项"""
+    try:
+        from services.llm_client import LLMClient
+        return LLMClient.get_all_models()
+    except Exception:
+        return []
+
+
+def _get_model_display_name(model: str) -> str:
+    """获取模型的友好显示名称"""
+    display_names = {
+        "deepseek-chat": "DeepSeek Chat（推荐，性价比最高）",
+        "deepseek-reasoner": "DeepSeek Reasoner（深度推理）",
+        "qwen-turbo": "通义千问 Turbo（最快）",
+        "qwen-plus": "通义千问 Plus（推荐，中文强）",
+        "qwen-max": "通义千问 Max（最强）",
+        "sensechat-5": "商汤 SenseChat-5（128K上下文）",
+        "sensechat-turbo": "商汤 SenseChat-Turbo（超低价）",
+        "sensenova-v6-pro": "商汤 SenseNova V6 Pro（多模态）",
+        "sensenova-v6-turbo": "商汤 SenseNova V6 Turbo（多模态）",
+        "LongCat-Flash-Thinking-2601": "LongCat Flash Thinking（深度推理）",
+    }
+    return display_names.get(model, model)
+
+
 def render_settings():
     """渲染系统设置页面"""
 
@@ -38,15 +64,13 @@ def render_settings():
         unsafe_allow_html=True,
     )
 
-    tab1, tab2 = st.tabs(["快速配置", "高级配置"])
+    tab1, tab2, tab3 = st.tabs(["快速配置", "高级配置", "🔧 自定义模型"])
 
     with tab1:
         # 尝试从数据库加载已保存的配置作为默认值
-        # 注意：即使没有初始化，也要尝试读取数据库配置
         saved_model = "deepseek-chat"
         saved_api_key = ""
         try:
-            # 优先从已初始化的orchestrator读取
             if st.session_state.get("initialized") and st.session_state.get("orchestrator"):
                 saved_model = st.session_state.orchestrator.db.get_setting(
                     "MODEL", "deepseek-chat"
@@ -55,77 +79,42 @@ def render_settings():
                     "API_KEY", ""
                 )
             else:
-                # 未初始化时，直接读取数据库
                 from services.database import Database
                 db = Database()
                 saved_model = db.get_setting("MODEL", "deepseek-chat")
                 saved_api_key = db.get_setting("API_KEY", "")
                 db.close()
-        except Exception as e:
-            # 静默处理错误，使用默认值
+        except Exception:
             pass
+
+        # 动态获取所有模型选项
+        all_models = _get_all_model_options()
+        # 确保默认模型在列表中
+        if saved_model and saved_model not in all_models:
+            all_models.insert(0, saved_model)
+
+        try:
+            default_idx = all_models.index(saved_model) if saved_model in all_models else 0
+        except ValueError:
+            default_idx = 0
 
         model = st.selectbox(
             "模型服务商",
-            [
-                "deepseek-chat",
-                "deepseek-reasoner",
-                "qwen-turbo",
-                "qwen-plus",
-                "qwen-max",
-                "sensechat-5",
-                "sensechat-turbo",
-                "sensenova-v6-pro",
-                "sensenova-v6-turbo",
-                "LongCat-Flash-Thinking-2601",
-            ],
-            index=(
-                [
-                    "deepseek-chat",
-                    "deepseek-reasoner",
-                    "qwen-turbo",
-                    "qwen-plus",
-                    "qwen-max",
-                    "sensechat-5",
-                    "sensechat-turbo",
-                    "sensenova-v6-pro",
-                    "sensenova-v6-turbo",
-                    "LongCat-Flash-Thinking-2601",
-                ].index(saved_model)
-                if saved_model
-                in [
-                    "deepseek-chat",
-                    "deepseek-reasoner",
-                    "qwen-turbo",
-                    "qwen-plus",
-                    "qwen-max",
-                    "sensechat-5",
-                    "sensechat-turbo",
-                    "sensenova-v6-pro",
-                    "sensenova-v6-turbo",
-                    "LongCat-Flash-Thinking-2601",
-                ]
-                else 0
-            ),
-            format_func=lambda x: {
-                "deepseek-chat": "DeepSeek Chat（推荐，性价比最高）",
-                "deepseek-reasoner": "DeepSeek Reasoner（深度推理）",
-                "qwen-turbo": "通义千问 Turbo（最快）",
-                "qwen-plus": "通义千问 Plus（推荐，中文强）",
-                "qwen-max": "通义千问 Max（最强）",
-                "sensechat-5": "商汤 SenseChat-5（128K上下文，对标GPT-4 Turbo）",
-                "sensechat-turbo": "商汤 SenseChat-Turbo（超低价，适合批量）",
-                "sensenova-v6-pro": "商汤 SenseNova V6 Pro（多模态，双冠军）",
-                "sensenova-v6-turbo": "商汤 SenseNova V6 Turbo（多模态，性价比）",
-                "LongCat-Flash-Thinking-2601": "LongCat Flash Thinking（深度推理）",
-            }.get(x, x),
+            all_models,
+            index=default_idx,
+            format_func=_get_model_display_name,
         )
+
+        # 注意：自定义模型的 API Key 在添加时存储，这里不重复填写
+        is_custom_model = model.startswith("custom_")
+        api_key_placeholder = "（已随模型配置保存）" if is_custom_model else "sk-..."
+        api_key_default = "" if is_custom_model else (saved_api_key if saved_api_key else "")
 
         api_key = st.text_input(
             "API Key",
             type="password",
-            value=saved_api_key if saved_api_key else "",
-            placeholder="sk-...",
+            value=api_key_default,
+            placeholder=api_key_placeholder,
             help=(
                 "DeepSeek: https://platform.deepseek.com/api_keys\n"
                 "通义千问: https://dashscope.console.aliyun.com/apiKey\n"
@@ -134,32 +123,44 @@ def render_settings():
         )
 
         if st.button("保存并连接", type="primary", use_container_width=True):
-            if not api_key:
-                callout("请输入API Key", type="error")
+            # 自定义模型已包含 API Key，不需要额外输入
+            if not is_custom_model and not api_key:
+                callout("请输入 API Key", type="error")
                 return
 
-            # 尝试连接
             with st.spinner("正在测试连接..."):
                 try:
-                    from services.orchestrator import Orchestrator
+                    from services.llm_client import LLMClient
 
                     # 关闭旧连接
                     if st.session_state.get("orchestrator"):
                         st.session_state.orchestrator.close()
 
-                    st.session_state.orchestrator = Orchestrator(
-                        model=model,
-                        api_key=api_key,
-                    )
+                    # 创建 LLM 客户端
+                    if is_custom_model:
+                        # 自定义模型：使用注册时存储的 API Key
+                        llm_client = LLMClient(model=model)
+                        connect_api_key = None  # 不在数据库存储 API Key
+                    else:
+                        # 内置模型：使用用户输入的 API Key
+                        llm_client = LLMClient(model=model, api_key=api_key)
+                        connect_api_key = api_key
+
                     st.session_state.initialized = True
 
                     # 测试调用
-                    info = st.session_state.orchestrator.llm.get_model_info()
+                    info = llm_client.get_model_info()
                     callout(f"连接成功！模型: {info['model']}", type="success")
 
-                    # 持久化配置到数据库
+                    # 持久化到数据库（API Key 单独加密存储）
+                    from services.orchestrator import Orchestrator
+                    st.session_state.orchestrator = Orchestrator(
+                        model=model,
+                        api_key=connect_api_key,
+                    )
                     st.session_state.orchestrator.db.set_setting("MODEL", model)
-                    st.session_state.orchestrator.db.set_setting("API_KEY", api_key)
+                    if connect_api_key:
+                        st.session_state.orchestrator.db.set_setting("API_KEY", connect_api_key)
                     callout("配置已保存，刷新页面后仍然有效。", type="info")
 
                 except Exception as e:
@@ -218,6 +219,104 @@ API_KEY = "sk-your-key"
             "</div>",
             unsafe_allow_html=True,
         )
+
+    with tab3:
+        st.markdown(
+            '<div style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:20px;">'
+            "添加自定义 OpenAI 兼容模型。配置后可在「快速配置」中选择使用。</div>",
+            unsafe_allow_html=True,
+        )
+
+        with st.form("add_custom_model"):
+            st.markdown("**添加新模型**")
+            custom_name = st.text_input(
+                "模型名称",
+                placeholder="例如: my-gpt-4、custom-llama",
+                help="输入一个唯一标识符，如模型 ID 或自定义名称",
+            )
+            custom_base_url = st.text_input(
+                "API Base URL",
+                placeholder="https://api.openai.com/v1",
+                help="OpenAI 兼容 API 的 base URL（通常以 /v1 结尾）",
+            )
+            custom_api_key = st.text_input(
+                "API Key",
+                type="password",
+                placeholder="sk-...",
+            )
+            custom_model_id = st.text_input(
+                "模型 ID",
+                placeholder="gpt-4o、claude-3-sonnet-20240229",
+                help="在 API 中实际使用的模型标识符（如请求体中的 model 字段值）",
+            )
+
+            submitted = st.form_submit_button(
+                "添加模型",
+                type="primary",
+                use_container_width=True,
+            )
+
+            if submitted:
+                if not custom_name or not custom_base_url or not custom_api_key or not custom_model_id:
+                    callout("请填写所有字段", type="error")
+                else:
+                    try:
+                        from services.llm_client import register_custom_model
+
+                        # 注册自定义模型：模型名用 custom_ 前缀区分
+                        model_key = f"custom_{custom_name}"
+                        register_custom_model(
+                            model_name=model_key,
+                            base_url=custom_base_url.rstrip("/"),
+                            api_key=custom_api_key,
+                        )
+                        # 持久化到数据库（含加密的 API Key）
+                        from services.database import Database
+                        db = Database()
+                        db.set_setting(f"CUSTOM_MODEL_{custom_name}_BASE_URL", custom_base_url.rstrip("/"))
+                        db.set_setting(f"CUSTOM_MODEL_{custom_name}_MODEL_ID", custom_model_id)
+                        db.set_setting(f"CUSTOM_MODEL_{custom_name}_NAME", custom_name)
+                        db.set_setting(f"CUSTOM_MODEL_{custom_name}_API_KEY", custom_api_key)
+                        db.close()
+
+                        callout(
+                            f"✅ 自定义模型「{custom_name}」添加成功！请在「快速配置」中选择使用。",
+                            type="success",
+                        )
+                        st.rerun()
+                    except Exception as e:
+                        callout(f"添加失败: {str(e)}", type="error")
+
+        divider()
+
+        # 已添加的自定义模型列表
+        st.markdown("**已添加的自定义模型**")
+        try:
+            from services.llm_client import LLMClient
+            custom_models = LLMClient.get_custom_models()
+            if custom_models:
+                for model_key in custom_models:
+                    custom_name = model_key.replace("custom_", "")
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"- **{custom_name}**")
+                    with col2:
+                        if st.button("🗑️", key=f"del_{model_key}"):
+                            try:
+                                LLMClient.remove_custom_model(model_key)
+                                # 同时清理数据库元数据
+                                from services.database import Database
+                                db = Database()
+                                for key_suffix in ["BASE_URL", "MODEL_ID", "NAME"]:
+                                    db.delete_setting(f"CUSTOM_MODEL_{custom_name}_{key_suffix}")
+                                db.close()
+                            except Exception:
+                                pass
+                            st.rerun()
+            else:
+                st.info("暂无自定义模型，请使用上方表单添加。")
+        except Exception as e:
+            st.warning(f"加载自定义模型列表失败: {e}")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
