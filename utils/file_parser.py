@@ -128,7 +128,16 @@ def parse_csv(file_bytes: bytes) -> List[Dict[str, Any]]:
     try:
         import pandas as pd
         csv_file = io.BytesIO(file_bytes)
-        df = pd.read_csv(csv_file)
+        # 尝试多种编码
+        for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
+            try:
+                csv_file.seek(0)
+                df = pd.read_csv(csv_file, encoding=encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            raise ValueError("无法识别 CSV 文件编码")
         df = df.fillna("")
         records = df.to_dict("records")
         return records

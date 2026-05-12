@@ -119,7 +119,14 @@ class ContentAnalysisPage(AnalysisPage):
                 if file_type in ["xlsx", "xls"]:
                     st.session_state.content_df = pd.read_excel(uploaded_file)
                 else:
-                    st.session_state.content_df = pd.read_csv(uploaded_file)
+                    # 尝试多种编码读取CSV
+                    try:
+                        st.session_state.content_df = pd.read_csv(uploaded_file, encoding="utf-8")
+                    except UnicodeDecodeError:
+                        try:
+                            st.session_state.content_df = pd.read_csv(uploaded_file, encoding="gbk")
+                        except UnicodeDecodeError:
+                            st.session_state.content_df = pd.read_csv(uploaded_file, encoding="latin-1")
 
             df = st.session_state.content_df
 
