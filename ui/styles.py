@@ -94,10 +94,11 @@ BASE_STYLES = """
     color: var(--text-primary) !important;
 }
 
-/* 隐藏 Streamlit 默认元素 */
+/* 隐藏 Streamlit 默认元素（不影响侧边栏） */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-header {visibility: hidden;}
+.stApp > header {visibility: hidden;}
+/* 注意：不隐藏所有 header，因为侧边栏折叠按钮在 header 中 */
 
 /* === 字体 === */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -585,27 +586,30 @@ TABLE_STYLES = """
 # 侧边栏样式
 # ============================================================
 SIDEBAR_STYLES = """
-/* === 侧边栏容器 === */
+/* === 侧边栏容器 - 确保可见 === */
 section[data-testid="stSidebar"] {
     background: var(--bg-elevated) !important;
     border-right: 1px solid var(--border-default) !important;
-    width: 280px !important;
-    min-width: 280px !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: auto !important;
+    min-width: 260px !important;
+    max-width: 320px !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 100 !important;
 }
 
-section[data-testid="stSidebar"]::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 1px;
-    height: 100%;
-    background: linear-gradient(
-        180deg,
-        transparent,
-        var(--border-default),
-        transparent
-    );
+/* 确保侧边栏内容可见 */
+section[data-testid="stSidebar"] > div {
+    visibility: visible !important;
+    display: block !important;
+}
+
+/* 确保侧边栏不会被 header 隐藏规则影响 */
+section[data-testid="stSidebar"] * {
+    visibility: visible !important;
 }
 
 /* === 侧边栏标题 === */
@@ -1518,10 +1522,8 @@ _BASE_CSS = f"""
     color: {COLORS["text_primary"]};
 }}
 
-/* 隐藏 Streamlit 默认元素 */
-#MainMenu, footer, header {{
-    visibility: hidden;
-}}
+/* 隐藏 Streamlit 默认元素（不影响侧边栏） */
+#MainMenu, footer {{ visibility: hidden; }}
 
 .stApp > header {{
     background-color: transparent !important;
