@@ -98,35 +98,13 @@ def main():
     # 自动初始化编排器
     _auto_init_orchestrator()
 
-    # 处理页面跳转（从其他页面通过按钮跳转过来）
-    nav_target = st.session_state.pop("nav_target", None)
-    if nav_target:
-        nav_map = {
-            "settings": "⚙️ 系统设置",
-            "content": "📝 内容分析",
-            "lead": "👤 线索分析",
-            "match": "🎯 匹配中心",
-            "strategy": "💡 策略建议",
-            "cost": "💰 成本分析",
-            "dashboard": "📊 仪表盘",
-        }
-        if nav_target in nav_map:
-            st.session_state.current_page = nav_map[nav_target]
-
     # 确定当前页面
-    current_page = st.session_state.get("current_page", "📊 仪表盘")
-
-    # 页面选项列表
     page_options = ["📊 仪表盘", "📝 内容分析", "👤 线索分析",
                     "🎯 匹配中心", "💡 策略建议", "💰 成本分析", "⚙️ 系统设置"]
 
-    if current_page not in page_options:
-        current_page = "📊 仪表盘"
-
-    try:
-        default_index = page_options.index(current_page)
-    except ValueError:
-        default_index = 0
+    # 初始化 session_state（仅首次）
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "📊 仪表盘"
 
     # ============ 侧边栏 ============
     with st.sidebar:
@@ -134,14 +112,43 @@ def main():
         st.caption("AI驱动的内容-商业转化智能平台")
         st.markdown("---")
 
-        page = st.radio(
+        # 使用 on_change 回调 + session_state 管理导航，避免 index 冲突
+        def _on_page_change():
+            st.session_state.current_page = st.session_state._page_radio
+
+        # 计算初始 index（仅用于首次渲染）
+        try:
+            init_index = page_options.index(st.session_state.current_page)
+        except ValueError:
+            init_index = 0
+
+        st.radio(
             "导航菜单",
             page_options,
+            index=init_index,
             label_visibility="collapsed",
-            index=default_index,
+            key="_page_radio",
+            on_change=_on_page_change,
         )
 
-        st.session_state.current_page = page
+        # 同步 nav_target 跳转（从按钮跳转过来时）
+        nav_target = st.session_state.pop("nav_target", None)
+        if nav_target:
+            nav_map = {
+                "settings": "⚙️ 系统设置",
+                "content": "📝 内容分析",
+                "lead": "👤 线索分析",
+                "match": "🎯 匹配中心",
+                "strategy": "💡 策略建议",
+                "cost": "💰 成本分析",
+                "dashboard": "📊 仪表盘",
+            }
+            if nav_target in nav_map:
+                st.session_state.current_page = nav_map[nav_target]
+                st.session_state._page_radio = nav_map[nav_target]
+                st.rerun()
+
+        current_page = st.session_state.current_page
 
         st.markdown("---")
 
