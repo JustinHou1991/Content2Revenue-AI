@@ -10,6 +10,11 @@ import streamlit as st
 from typing import Optional, Callable, List, Dict, Any
 
 
+def _html(html: str) -> None:
+    """安全渲染 HTML 字符串，自动去除首尾空白防止被误判为代码块。"""
+    st.markdown(html.strip(), unsafe_allow_html=True)
+
+
 # ============================================================
 # 指标卡片组件 (Databox 风格)
 # ============================================================
@@ -107,7 +112,7 @@ def metric_card(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -187,7 +192,7 @@ def data_card(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -233,7 +238,7 @@ def status_badge(
     </span>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -277,7 +282,7 @@ def empty_state(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
     if action_label:
         if action_callback:
@@ -355,7 +360,7 @@ def page_header(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -463,7 +468,7 @@ def progress_indicator(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -577,7 +582,7 @@ def callout(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -605,7 +610,7 @@ def sidebar_logo(
         </div>
     </div>
     """
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
 
 # ============================================================
@@ -649,7 +654,7 @@ def sidebar_nav(
 
         col1, col2 = st.columns([1, 4])
         with col1:
-            st.markdown(html, unsafe_allow_html=True)
+            _html(html)
         with col2:
             if st.button(
                 item.get("label", ""),
@@ -701,7 +706,7 @@ def chart_container(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
 
     if chart_func:
         chart_func()
@@ -738,12 +743,12 @@ def skeleton_loader(
                 <div class="c2r-skeleton c2r-skeleton--text" style="width: 80%;"></div>
             </div>
             """
-            st.markdown(html, unsafe_allow_html=True)
+            _html(html)
 
     elif type == "text":
         for _ in range(rows):
             html = '<div class="c2r-skeleton c2r-skeleton--text"></div>'
-            st.markdown(html, unsafe_allow_html=True)
+            _html(html)
 
     elif type == "table":
         # 表头
@@ -819,4 +824,4 @@ def stat_row(
     </div>
     """
 
-    st.markdown(html, unsafe_allow_html=True)
+    _html(html)
