@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 
 
 def _restore_custom_models():
-    """从数据库恢复自定义模型配置"""
+    """从数据库恢复自定义模型配置（延迟执行，避免阻塞启动）"""
     try:
         from services.database import Database
         from services.llm_client import register_custom_model
@@ -46,7 +46,6 @@ def _restore_custom_models():
             key = row["key"]
             base_url = row["value"]
             # 解析模型名称：从 CUSTOM_MODEL_{name}_BASE_URL 提取 name
-            # 注意：名称中可能包含下划线，所以用 endswith 判断
             if not key.startswith("CUSTOM_MODEL_") or not key.endswith("_BASE_URL"):
                 continue
             # 提取 name: CUSTOM_MODEL_{name}_BASE_URL
@@ -70,10 +69,6 @@ def _restore_custom_models():
         db.close()
     except Exception as e:
         logger.debug("恢复自定义模型失败（不影响运行）: %s", e)
-
-
-# 启动时恢复自定义模型
-_restore_custom_models()
 
 # 初始化session state
 if "orchestrator" not in st.session_state:
@@ -147,6 +142,11 @@ def init_orchestrator():
 
 def main():
     """主入口"""
+
+    # 延迟恢复自定义模型（避免阻塞页面渲染）
+    if "custom_models_restored" not in st.session_state:
+        _restore_custom_models()
+        st.session_state.custom_models_restored = True
 
     # ============ 侧边栏（最先渲染，确保不被后续代码影响） ============
     with st.sidebar:
