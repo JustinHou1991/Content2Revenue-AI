@@ -146,27 +146,62 @@ class ContentAnalysisPage(AnalysisPage):
 
             df = st.session_state.content_df
 
-            # 显示字段映射预览
+            # ===== 简化的字段映射：只需选择"脚本内容"列 =====
             st.markdown("---")
-            auto_mapping = detect_columns(df.columns.tolist())
-            user_mapping = show_mapping_preview(auto_mapping, df.columns.tolist())
+            st.subheader("📋 选择脚本内容列")
+            st.caption("系统需要知道哪一列包含脚本/文案内容")
 
-            # 验证映射
-            is_valid, missing_fields = validate_mapping_for_analysis(
-                user_mapping, "content"
+            # 自动检测最可能的"脚本内容"列
+            from utils.field_mapping import REVERSE_MAPPING
+            auto_col = None
+            for col in df.columns:
+                col_lower = str(col).lower().strip()
+                if col_lower in REVERSE_MAPPING and REVERSE_MAPPING[col_lower] == "脚本内容":
+                    auto_col = col
+                    break
+                for keyword in ["脚本", "文案", "内容", "正文", "text", "content"]:
+                    if keyword in col_lower:
+                        auto_col = col
+                        break
+                if auto_col:
+                    break
+
+            # 如果没找到，选第一个文本内容较长的列
+            if auto_col is None:
+                for col in df.columns:
+                    if df[col].dtype == "object" and df[col].notna().any():
+                        sample = str(df[col].dropna().iloc[0]) if len(df[col].dropna()) > 0 else ""
+                        if len(sample) > 20:
+                            auto_col = col
+                            break
+
+            col_options = ["-- 请选择 --"] + list(df.columns)
+            default_idx = col_options.index(auto_col) if auto_col and auto_col in col_options else 0
+
+            selected_col = st.selectbox(
+                "脚本内容列",
+                col_options,
+                index=default_idx,
+                help="选择包含脚本/文案内容的列",
             )
 
-            if not is_valid:
-                callout(f"缺少必需字段: {', '.join(missing_fields)}", type="error")
-                st.info("请在上方映射表中选择'脚本内容'对应的CSV列")
+            if selected_col != "-- 请选择 --":
+                st.session_state.content_field_mapping = {"脚本内容": selected_col}
+                st.success(f"✅ 已选择「{selected_col}」作为脚本内容列（共 {len(df)} 条记录）")
+
+                with st.expander("预览数据"):
+                    st.dataframe(df[[selected_col]].head(3), use_container_width=True)
+
+                batch_btn = st.button(
+                    f"开始批量分析（{len(df)} 条脚本）",
+                    type="primary",
+                    use_container_width=True,
+                )
+
+                if batch_btn:
+                    self._handle_batch_analysis()
             else:
-                st.session_state.content_field_mapping = user_mapping
-
-            # 批量分析按钮
-            batch_btn = st.button("开始批量分析", type="primary", use_container_width=True)
-
-            if batch_btn:
-                self._handle_batch_analysis()
+                st.warning("请选择包含脚本内容的列")
         else:
             st.session_state.content_df = None
             st.session_state.content_field_mapping = None

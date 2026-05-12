@@ -119,27 +119,74 @@ class LeadAnalysisPage(AnalysisPage):
 
             df = st.session_state.lead_df
 
-            # 显示字段映射预览
+            # ===== 简化的字段映射：只需选择"需求描述"列 =====
             st.markdown("---")
-            auto_mapping = detect_columns(df.columns.tolist())
-            user_mapping = show_mapping_preview(auto_mapping, df.columns.tolist())
+            st.subheader("📋 选择线索描述列")
+            st.caption("系统需要知道哪一列包含线索的描述信息（如需求描述、对话记录等）")
 
-            # 验证映射
-            is_valid, missing_fields = validate_mapping_for_analysis(
-                user_mapping, "lead"
+            # 自动检测最可能的"需求描述"列
+            from utils.field_mapping import REVERSE_MAPPING
+            auto_col = None
+            for col in df.columns:
+                col_lower = str(col).lower().strip()
+                if col_lower in REVERSE_MAPPING and REVERSE_MAPPING[col_lower] == "需求描述":
+                    auto_col = col
+                    break
+                # 模糊匹配
+                for keyword in ["需求", "描述", "对话", "记录", "内容", "备注", "说明"]:
+                    if keyword in col_lower:
+                        auto_col = col
+                        break
+                if auto_col:
+                    break
+
+            # 如果没找到，尝试选择第一个文本列
+            if auto_col is None:
+                for col in df.columns:
+                    if df[col].dtype == "object" and df[col].notna().any():
+                        sample = str(df[col].dropna().iloc[0]) if len(df[col].dropna()) > 0 else ""
+                        if len(sample) > 20:  # 选内容较长的列
+                            auto_col = col
+                            break
+
+            col_options = ["-- 请选择 --"] + list(df.columns)
+            default_idx = col_options.index(auto_col) if auto_col and auto_col in col_options else 0
+
+            selected_col = st.selectbox(
+                "线索描述列",
+                col_options,
+                index=default_idx,
+                help="选择包含线索需求/对话内容的列",
             )
 
-            if not is_valid:
-                callout(f"缺少必需字段: {', '.join(missing_fields)}", type="error")
-                st.info("请在上方映射表中选择'需求描述'对应的CSV列")
+            if selected_col != "-- 请选择 --":
+                st.session_state.lead_field_mapping = {"需求描述": selected_col}
+                st.success(f"✅ 已选择「{selected_col}」作为线索描述列（共 {len(df)} 条记录）")
+
+                # 预览前3条数据
+                with st.expander("预览数据"):
+                    preview_cols = [selected_col]
+                    # 额外显示公司名称、联系人等辅助列（如果有）
+                    for extra_col in df.columns:
+                        if extra_col != selected_col:
+                            for kw in ["公司", "企业", "联系人", "姓名", "行业", "电话", "手机"]:
+                                if kw in str(extra_col):
+                                    preview_cols.append(extra_col)
+                                    break
+                    preview_cols = preview_cols[:4]  # 最多显示4列
+                    st.dataframe(df[preview_cols].head(3), use_container_width=True)
+
+                # 批量分析按钮
+                batch_btn = st.button(
+                    f"开始批量分析（{len(df)} 条线索）",
+                    type="primary",
+                    use_container_width=True,
+                )
+
+                if batch_btn:
+                    self._handle_batch_analysis()
             else:
-                st.session_state.lead_field_mapping = user_mapping
-
-            # 批量分析按钮
-            batch_btn = st.button("开始批量分析", type="primary", use_container_width=True)
-
-            if batch_btn:
-                self._handle_batch_analysis()
+                st.warning("请选择包含线索描述的列")
         else:
             st.session_state.lead_df = None
             st.session_state.lead_field_mapping = None
