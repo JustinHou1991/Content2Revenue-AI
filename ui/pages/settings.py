@@ -42,9 +42,11 @@ def render_settings():
 
     with tab1:
         # 尝试从数据库加载已保存的配置作为默认值
+        # 注意：即使没有初始化，也要尝试读取数据库配置
         saved_model = "deepseek-chat"
         saved_api_key = ""
         try:
+            # 优先从已初始化的orchestrator读取
             if st.session_state.get("initialized") and st.session_state.get("orchestrator"):
                 saved_model = st.session_state.orchestrator.db.get_setting(
                     "MODEL", "deepseek-chat"
@@ -52,7 +54,15 @@ def render_settings():
                 saved_api_key = st.session_state.orchestrator.db.get_setting(
                     "API_KEY", ""
                 )
-        except Exception:
+            else:
+                # 未初始化时，直接读取数据库
+                from services.database import Database
+                db = Database()
+                saved_model = db.get_setting("MODEL", "deepseek-chat")
+                saved_api_key = db.get_setting("API_KEY", "")
+                db.close()
+        except Exception as e:
+            # 静默处理错误，使用默认值
             pass
 
         model = st.selectbox(
