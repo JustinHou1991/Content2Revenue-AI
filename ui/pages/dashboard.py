@@ -128,6 +128,17 @@ def render_dashboard():
 
     if show_empty:
         divider()
+
+        def _go_to_settings():
+            # 动态计算"系统设置"在导航列表中的索引
+            nav_labels = [
+                "📊 仪表盘", "📝 内容分析", "👤 线索分析",
+                "🎯 匹配中心", "💡 策略建议", "💰 成本分析", "⚙️ 系统设置",
+            ]
+            if "⚙️ 系统设置" in nav_labels:
+                st.session_state.nav_page = nav_labels.index("⚙️ 系统设置")
+            st.rerun()
+
         empty_state(
             title="欢迎使用 Content2Revenue AI",
             description="开始你的第一个分析任务，AI 将帮你优化内容变现策略。"
@@ -135,6 +146,7 @@ def render_dashboard():
             else "请先前往「系统设置」配置 API Key，然后加载示例数据或开始你的第一个分析任务。",
             icon="&#128075;",
             action_label="前往系统设置" if not is_initialized else "前往系统设置加载示例数据",
+            action_callback=_go_to_settings,
         )
         return
 

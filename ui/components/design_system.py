@@ -11,8 +11,15 @@ from typing import Optional, Callable, List, Dict, Any
 
 
 def _html(html: str) -> None:
-    """安全渲染 HTML 字符串，自动去除首尾空白防止被误判为代码块。"""
-    st.markdown(html.strip(), unsafe_allow_html=True)
+    """安全渲染 HTML 字符串。
+
+    Streamlit 的 st.markdown 使用 CommonMarkdown 解析器，会将 4 空格缩进的行
+    当作代码块。本函数将 HTML 中的换行和多余空白压缩为单行，彻底避免此问题。
+    """
+    import re
+    # 将所有连续空白（含换行、制表符）压缩为单个空格
+    collapsed = re.sub(r'\s+', ' ', html).strip()
+    st.markdown(collapsed, unsafe_allow_html=True)
 
 
 # ============================================================

@@ -59,6 +59,8 @@ if "orchestrator" not in st.session_state:
     st.session_state.orchestrator = None
 if "initialized" not in st.session_state:
     st.session_state.initialized = False
+if "nav_page" not in st.session_state:
+    st.session_state.nav_page = 0
 
 
 def _get_db_settings():
@@ -175,6 +177,8 @@ def main():
             list(nav_key_to_page.values()),
             label_visibility="collapsed",
             format_func=lambda x: x,
+            index=st.session_state.nav_page,
+            key="sidebar_nav",
         )
 
         st.markdown('<div class="c2r-sidebar-divider"></div>', unsafe_allow_html=True)
