@@ -123,16 +123,25 @@ class ContentAnalysisPage(AnalysisPage):
                     # CSV文件：先将内容读入内存，再用BytesIO解析
                     file_bytes = uploaded_file.getvalue()
                     csv_file = io.BytesIO(file_bytes)
-                    # 尝试多种编码读取CSV
+                    
+                    # 尝试多种编码和分隔符读取CSV
+                    success = False
                     for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
-                        try:
-                            csv_file.seek(0)
-                            st.session_state.content_df = pd.read_csv(csv_file, encoding=encoding)
+                        if success:
                             break
-                        except UnicodeDecodeError:
-                            continue
-                    else:
-                        st.error("无法识别CSV文件编码，请将文件保存为UTF-8格式后重试")
+                        for sep in [",", ";", "\t", "|"]:
+                            try:
+                                csv_file.seek(0)
+                                df = pd.read_csv(csv_file, encoding=encoding, sep=sep, engine="python", on_bad_lines="skip")
+                                if len(df.columns) > 1:
+                                    st.session_state.content_df = df
+                                    success = True
+                                    break
+                            except Exception:
+                                continue
+                    
+                    if not success:
+                        st.error("无法解析CSV文件，请检查文件格式或尝试使用Excel格式(.xlsx)")
                         return
 
             df = st.session_state.content_df
