@@ -586,13 +586,30 @@ class LLMClient:
         pattern = r"```(?:json)?\s*([\s\S]*?)```"
         match = re.search(pattern, text)
         if match:
-            return match.group(1).strip()
+            candidate = match.group(1).strip()
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                pass
 
-        # 尝试提取第一个 { ... } 块
+        # 尝试匹配第一个完整的 JSON 对象 { ... }
+        # 使用栈来确保 { 和 } 正确配对
         start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            return text[start : end + 1]
+        if start != -1:
+            depth = 0
+            for i, ch in enumerate(text[start:], start):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            json.loads(candidate)
+                            return candidate
+                        except json.JSONDecodeError:
+                            break
 
         raise ValueError(f"无法从模型输出中提取JSON: {text[:200]}...")
 

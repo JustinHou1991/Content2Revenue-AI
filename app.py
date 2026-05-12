@@ -41,8 +41,6 @@ if "orchestrator" not in st.session_state:
     st.session_state.orchestrator = None
 if "initialized" not in st.session_state:
     st.session_state.initialized = False
-if "page" not in st.session_state:
-    st.session_state.page = "dashboard"
 
 
 def _safe_error_message(error: Exception) -> str:
@@ -81,9 +79,11 @@ def _auto_init_orchestrator():
         import traceback
         err_trace = traceback.format_exc()
         logger.error("初始化失败: %s", e, exc_info=True)
-        # 用 st.exception 显示详细错误
+        # 用用户友好的错误提示，不泄露敏感信息
         st.session_state.initialized = False
-        st.exception(e)
+        st.error(f"⚠️ 系统初始化失败: {str(e)}")
+        with st.expander("查看技术详情（供调试用）"):
+            st.code(err_trace)
         return False
 
 

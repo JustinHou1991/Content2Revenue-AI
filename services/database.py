@@ -153,8 +153,9 @@ class Database:
                 a ^ b for a, b in zip(encrypted_bytes, key_bytes[: len(encrypted_bytes)])
             )
             return decrypted.decode()
-        except Exception:
-            # 如果解密失败，可能是因为旧数据是明文存储的
+        except Exception as e:
+            # 如果解密失败，记录警告并静默返回（可能是明文存储的旧数据）
+            logger.warning("XOR解密失败: %s (数据可能为明文)", e)
             return encrypted
 
     def _encrypt_value(self, value: str) -> str:
@@ -201,9 +202,12 @@ class Database:
         xor_result = self._xor_decrypt(encrypted)
         return xor_result
 
-    def _migrate_to_fernet(self) -> int:
+    def _migrate_to_fernet(self, conn=None) -> int:
         """
         将所有旧的XOR加密数据自动迁移为Fernet加密。
+
+        Args:
+            conn: 可选的数据库连接（用于在同一事务内执行迁移）
 
         Returns:
             成功迁移的记录数量
@@ -213,47 +217,38 @@ class Database:
             return 0
 
         migrated = 0
+        own_conn = conn is None
         try:
-            with self._get_conn() as conn:
-                # 查找所有非Fernet加密的API_KEY记录
-                rows = conn.execute(
-                    "SELECT key, value FROM app_settings WHERE key = 'API_KEY' AND value IS NOT NULL AND value != ''"
-                ).fetchall()
+            if own_conn:
+                conn = self._get_conn()
 
-                for row in rows:
-                    raw_value = row["value"]
-                    # 跳过已经是Fernet加密的数据
-                    if raw_value.startswith(_FERNET_PREFIX):
-                        continue
+            # 查找所有非Fernet加密的API_KEY记录
+            rows = conn.execute(
+                "SELECT key, value FROM app_settings WHERE key = 'API_KEY' AND value IS NOT NULL AND value != ''"
+            ).fetchall()
 
-                    # 尝试用XOR解密旧数据
-                    decrypted = self._xor_decrypt(raw_value)
-                    if decrypted and decrypted != raw_value:
-                        # 解密成功，用Fernet重新加密
-                        new_encrypted = self._encrypt_value(decrypted)
-                        now = datetime.now().isoformat()
-                        conn.execute(
-                            """
-                            UPDATE app_settings SET value = ?, updated_at = ?
-                            WHERE key = ?
-                            """,
-                            (new_encrypted, now, row["key"]),
-                        )
-                        migrated += 1
-                        logger.info("已迁移加密数据: key=%s", row["key"])
-                    else:
-                        # 可能是明文数据，也用Fernet加密保护
-                        new_encrypted = self._encrypt_value(raw_value)
-                        now = datetime.now().isoformat()
-                        conn.execute(
-                            """
-                            UPDATE app_settings SET value = ?, updated_at = ?
-                            WHERE key = ?
-                            """,
-                            (new_encrypted, now, row["key"]),
-                        )
-                        migrated += 1
-                        logger.info("已将明文数据升级为Fernet加密: key=%s", row["key"])
+            for row in rows:
+                raw_value = row["value"]
+                # 跳过已经是Fernet加密的数据
+                if raw_value.startswith(_FERNET_PREFIX):
+                    continue
+
+                # 尝试用XOR解密旧数据
+                decrypted = self._xor_decrypt(raw_value)
+                if decrypted and decrypted != raw_value:
+                    # 解密成功，用Fernet重新加密
+                    new_encrypted = self._encrypt_value(decrypted)
+                else:
+                    # 可能是明文数据，也用Fernet加密保护
+                    new_encrypted = self._encrypt_value(raw_value)
+
+                now = datetime.now().isoformat()
+                conn.execute(
+                    "UPDATE app_settings SET value = ?, updated_at = ? WHERE key = ?",
+                    (new_encrypted, now, row["key"]),
+                )
+                migrated += 1
+                logger.info("已迁移加密数据: key=%s", row["key"])
         except Exception as e:
             logger.error("加密数据迁移失败: %s", e)
 
@@ -840,18 +835,22 @@ class Database:
                 "SELECT value FROM app_settings WHERE key = ?", (key,)
             ).fetchone()
             value = row["value"] if row else default
+
             # API_KEY 需要解密后返回
             if key == "API_KEY" and value:
-                # 检测到旧的XOR加密数据，自动迁移为Fernet加密
+                # 检测到旧的XOR加密数据，在同一事务内迁移为Fernet加密
                 if self._fernet is not None and not value.startswith(_FERNET_PREFIX):
                     logger.info("检测到旧的加密格式，自动迁移API_KEY为Fernet加密")
-                    self._migrate_to_fernet()
+                    # 在同一事务内完成迁移和读取
+                    self._migrate_to_fernet(conn=conn)
                     # 重新读取迁移后的值
                     row = conn.execute(
                         "SELECT value FROM app_settings WHERE key = ?", (key,)
                     ).fetchone()
                     value = row["value"] if row else default
+
                 value = self._decrypt_value(value)
+
             return value
 
     def set_setting(self, key: str, value: str) -> None:
@@ -1490,8 +1489,11 @@ class Database:
                 try:
                     d[field] = json.loads(d[field])
                 except (json.JSONDecodeError, TypeError):
+                    # 记录警告，但保留原始字符串供下游诊断
                     logger.warning(
-                        "JSON解析失败: 字段=%s, 值=%s", field, str(d[field])[:100]
+                        "JSON解析失败，保留原始字符串: 字段=%s, 值=%s",
+                        field,
+                        str(d[field])[:100],
                     )
 
         return d

@@ -414,20 +414,23 @@ class MatchEngine(BaseAnalyzer):
             lead_id = lead.get("lead_id")
             matches = matches_by_lead[lead_idx]
 
-            # 按分数排序
-            matches.sort(
+            # 按分数排序（成功的在前）
+            successful = [m for m in matches if "error" not in m]
+            failed = [m for m in matches if "error" in m]
+            successful.sort(
                 key=lambda x: x.get("match_result", {}).get("overall_score", 0),
                 reverse=True,
             )
-
+            # 只取前 top_k 个成功匹配，失败项不计入
             lead_result: Dict[str, Any] = {
                 "lead_id": lead_id or "unknown",
                 "lead_snapshot": {
                     "industry": lead_profile.get("industry"),
                     "company": lead.get("raw_data", {}).get("company", ""),
                 },
-                "top_matches": matches[:top_k],
+                "top_matches": successful[:top_k],
                 "total_content_scored": len(contents),
+                "failed_count": len(failed),  # 记录失败数量供诊断
             }
             results.append(lead_result)
 
