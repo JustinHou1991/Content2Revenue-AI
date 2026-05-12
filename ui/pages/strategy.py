@@ -283,7 +283,7 @@ class StrategyPage(BasePage):
                     callout(f"提交反馈失败: {str(e)}", type="error")
 
     def _render_history(self):
-        """展示历史策略"""
+        """展示历史策略（完整内容 + 反馈入口）"""
         st.subheader("历史策略建议")
         try:
             strategies = self._get_orchestrator().db.get_all_strategy_advices(limit=10)
@@ -291,34 +291,159 @@ class StrategyPage(BasePage):
                 for s in strategies:
                     strategy = s.get("strategy_json", {})
                     cs = strategy.get("content_strategy", {})
-                    hook = cs.get("recommended_hook", "未知")[:30]
+                    ds = strategy.get("distribution_strategy", {})
+                    cp = strategy.get("conversion_prediction", {})
+                    ab = strategy.get("a_b_test_suggestion", {})
 
-                    # 检查是否有反馈
+                    hook = cs.get("recommended_hook", "未知")
+                    structure = cs.get("recommended_structure", "未知")
+                    conv_rate = cp.get("estimated_conversion_rate", "未知")
+                    confidence = cp.get("confidence_level", "未知")
+
+                    # 反馈状态
                     try:
                         feedback = self._get_orchestrator().db.get_strategy_feedback(
                             s["id"]
                         )
-                        feedback_indicator = (
-                            "[OK]"
-                            if feedback and feedback.get("was_adopted")
-                            else "[NOTE]" if feedback else "[WAIT]"
-                        )
+                        if feedback and feedback.get("was_adopted"):
+                            fb_icon = "✅"
+                            fb_text = "已采纳"
+                        elif feedback:
+                            fb_icon = "📝"
+                            fb_text = "已反馈(未采纳)"
+                        else:
+                            fb_icon = "⏳"
+                            fb_text = "待反馈"
                     except Exception:
-                        feedback_indicator = "[WAIT]"
+                        feedback = None
+                        fb_icon = "⏳"
+                        fb_text = "待反馈"
 
-                    with st.expander(
-                        f"{feedback_indicator} 策略 {s['id'][:8]}... | {s['created_at'][:10]}"
-                    ):
-                        st.write(f"**推荐Hook:** {hook}")
-                        st.write(
-                            f"**转化预测:** {strategy.get('conversion_prediction', {}).get('estimated_conversion_rate', '未知')}"
-                        )
+                    title = f"{fb_icon} {fb_text} | 转化预测 {conv_rate} | {s['created_at'][:10]}"
+
+                    with st.expander(title):
+                        # === 内容策略 ===
+                        st.markdown("#### 📝 内容策略")
+                        st.markdown("**推荐Hook:**")
+                        st.code(hook, language=None)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**推荐结构**: {structure}")
+                            st.write(f"**语气指导**: {cs.get('tone_guidance', '未知')}")
+                        with col2:
+                            st.markdown("**核心话术要点:**")
+                            for point in cs.get("talking_points", []):
+                                st.write(f"- {point}")
+
+                        kws_include = cs.get("keywords_to_include", [])
+                        kws_avoid = cs.get("keywords_to_avoid", [])
+                        if kws_include or kws_avoid:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if kws_include:
+                                    st.markdown("**建议关键词:**")
+                                    for kw in kws_include:
+                                        _safe_badge(kw)
+                            with col2:
+                                if kws_avoid:
+                                    st.markdown("**避免关键词:**")
+                                    for kw in kws_avoid:
+                                        _safe_badge(kw)
+
+                        # === 分发策略 ===
+                        if ds:
+                            st.markdown("---")
+                            st.markdown("#### 📤 分发策略")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**最佳时间**: {ds.get('best_timing', '未知')}")
+                                st.write(f"**渠道建议**: {ds.get('channel_suggestion', '未知')}")
+                            with col2:
+                                steps = ds.get("follow_up_sequence", [])
+                                if steps:
+                                    st.markdown("**跟进节奏:**")
+                                    for step in steps:
+                                        st.write(f"- {step}")
+
+                        # === 转化预测 ===
+                        if cp:
+                            st.markdown("---")
+                            st.markdown("#### 📈 转化预测")
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                metric_card(
+                                    title="预估转化率",
+                                    value=conv_rate,
+                                    icon="&#128200;",
+                                    border_color="#10B981",
+                                )
+                            with col2:
+                                metric_card(
+                                    title="置信度",
+                                    value=confidence,
+                                    icon="&#128170;",
+                                    border_color="#6366F1",
+                                )
+                            with col3:
+                                sample = cp.get("recommended_sample_size", "未知")
+                                metric_card(
+                                    title="建议样本量",
+                                    value=sample,
+                                    icon="&#128202;",
+                                    border_color="#F59E0B",
+                                )
+
+                            factors = cp.get("key_success_factors", [])
+                            blockers = cp.get("potential_blockers", [])
+                            if factors or blockers:
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if factors:
+                                        st.markdown("**成功因素:**")
+                                        for f in factors:
+                                            st.write(f"✅ {f}")
+                                with col2:
+                                    if blockers:
+                                        st.markdown("**潜在障碍:**")
+                                        for b in blockers:
+                                            st.write(f"⚠️ {b}")
+
+                        # === A/B测试建议 ===
+                        if ab:
+                            st.markdown("---")
+                            st.markdown("#### 🧪 A/B测试建议")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.markdown("**方案A:**")
+                                st.info(ab.get("variant_a", ""))
+                            with col2:
+                                st.markdown("**方案B:**")
+                                st.info(ab.get("variant_b", ""))
+                            test_metric = ab.get("test_metric", "")
+                            if test_metric:
+                                st.write(f"**测试指标**: {test_metric}")
+
+                        # === 已有反馈展示 ===
                         if feedback:
-                            st.write(
-                                f"**采纳状态:** {'已采纳' if feedback.get('was_adopted') else '未采纳'}"
-                            )
-                            if feedback.get("actual_conversion"):
-                                st.write(f"**实际转化:** {feedback['actual_conversion']}%")
+                            st.markdown("---")
+                            st.markdown("#### 📋 反馈记录")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                adopted = "已采纳" if feedback.get("was_adopted") else "未采纳"
+                                st.metric("采纳状态", adopted)
+                            with col2:
+                                actual_conv = feedback.get("actual_conversion")
+                                if actual_conv is not None:
+                                    st.metric("实际转化率", f"{actual_conv}%")
+                            if feedback.get("feedback_notes"):
+                                st.info(f"**备注**: {feedback['feedback_notes']}")
+
+                        # === 反馈入口 ===
+                        st.markdown("---")
+                        if not feedback:
+                            self._render_feedback_form(s)
+                        else:
+                            st.caption("✅ 已提交反馈，感谢您的参与！")
             else:
                 empty_state(
                     title="暂无策略建议记录",
