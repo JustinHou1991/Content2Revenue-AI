@@ -348,17 +348,18 @@ class LeadAnalysisPage(AnalysisPage):
             if r.get("success"):
                 profile = r["data"]["profile"]
                 raw = r["data"].get("raw_data", {})
+                lid = r["data"].get("lead_id", "")[:8]
                 company = raw.get("company", raw.get("公司名称", ""))
                 name = raw.get("name", raw.get("联系人", ""))
                 score = profile.get("lead_score", 0)
                 grade = profile.get("lead_grade", "N/A")
 
-                label = f"{company}" if company else f"线索 #{r['index']+1}"
+                label = f"{company}" if company else f"线索"
                 if name:
                     label += f" · {name}"
 
                 with st.expander(
-                    f"{'🟢' if grade in ['A','B+'] else '🟡' if grade == 'B' else '🔴'} {grade}级 | {score}分 | {label}"
+                    f"#{r['index']+1} [{lid}] {'🟢' if grade in ['A','B+'] else '🟡' if grade == 'B' else '🔴'} {grade}级 | {score}分 | {label}"
                 ):
                     self._display_profile_simple(profile)
             else:
@@ -656,11 +657,12 @@ class LeadAnalysisPage(AnalysisPage):
                 if industry and industry != "未知":
                     title_parts.append(industry)
                 title = " | ".join(title_parts)
+                rid = record.get("id", "")[:8]
 
                 # 颜色标识
                 grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
 
-                with st.expander(f"{grade_icon} {title}"):
+                with st.expander(f"[{rid}] {grade_icon} {title}"):
                     # 简要信息
                     if name:
                         st.write(f"**联系人**: {name}")

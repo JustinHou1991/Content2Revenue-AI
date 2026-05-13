@@ -101,8 +101,9 @@ class StrategyPage(BasePage):
     def _display_strategy(self, result: dict):
         """展示策略建议"""
         strategy = result.get("strategy", {})
+        strategy_id = result.get("strategy_id", "")[:8]
 
-        callout("策略建议已生成！", type="success", icon="&#10003;")
+        callout(f"策略建议已生成！ID: {strategy_id}...", type="success", icon="&#10003;")
 
         # 顶部：内容和线索摘要（让用户知道是为谁生成的策略）
         match_id = result.get("match_id", "")
@@ -377,7 +378,8 @@ class StrategyPage(BasePage):
                         fb_icon = "⏳"
                         fb_text = "待反馈"
 
-                    title = f"{fb_icon} {fb_text} | 转化预测 {conv_rate} | {s['created_at'][:10]}"
+                    sid = s.get("id", "")[:8]
+                    title = f"[{sid}] {fb_icon} {fb_text} | 转化预测 {conv_rate} | {s['created_at'][:10]}"
 
                     with st.expander(title):
                         # === 内容策略 ===

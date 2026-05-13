@@ -347,8 +347,9 @@ class ContentAnalysisPage(AnalysisPage):
 
         for r in results:
             if r.get("success"):
+                cid = r["data"].get("content_id", "")[:8]
                 with st.expander(
-                    f"脚本 #{r['index']+1} - 评分 {r['data']['analysis'].get('content_score', 'N/A')}/10"
+                    f"#{r['index']+1} [{cid}] - 评分 {r['data']['analysis'].get('content_score', 'N/A')}/10"
                 ):
                     self._display_analysis(r["data"]["analysis"])
             else:
@@ -589,9 +590,10 @@ class ContentAnalysisPage(AnalysisPage):
                 score = analysis.get("content_score", "N/A")
                 hook_type = analysis.get("hook_type", "未知")
                 raw_text = record.get("raw_text", "")[:60] + "..."
+                rid = record.get("id", "")[:8]
 
                 with st.expander(
-                    f"评分 {score}/10 | {hook_type} | {record['created_at'][:10]}"
+                    f"[{rid}] 评分 {score}/10 | {hook_type} | {record['created_at'][:10]}"
                 ):
                     st.write(raw_text)
                     if st.button("查看详情", key=f"detail_{record['id']}"):

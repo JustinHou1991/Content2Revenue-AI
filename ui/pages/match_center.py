@@ -188,12 +188,13 @@ class MatchCenterPage(MatchPage):
 
                     for idx, r in enumerate(results, 1):
                         lead_snap = r.get("lead_snapshot", {})
+                        lid = lead_snap.get("lead_id", "")[:8]
                         company = lead_snap.get("company", "未知")
                         industry = lead_snap.get("industry", "未知")
                         grade = lead_snap.get("lead_grade", "?")
 
                         grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
-                        title = f"**#{idx}** {grade_icon} {grade}级 | {company}"
+                        title = f"**#{idx}** [{lid}] {grade_icon} {grade}级 | {company}"
                         if industry and industry != "未知":
                             title += f" ({industry})"
 
@@ -237,8 +238,13 @@ class MatchCenterPage(MatchPage):
         content_snap = result.get("content_snapshot", {})
         lead_snap = result.get("lead_snapshot", {})
         score = mr.get("overall_score", 0)
+        match_id = result.get("match_id", "")[:8]
 
-        # 顶部：综合评分
+        # 顶部：ID 和综合评分
+        if match_id:
+            st.caption(f"匹配ID: {match_id}...")
+
+        # 综合评分
         color = "#10B981" if score >= 7 else "#F59E0B" if score >= 5 else "#EF4444"
         metric_card(
             title="综合匹配度",
@@ -347,9 +353,9 @@ class MatchCenterPage(MatchPage):
                     created = record.get("created_at", "")[:10]
                     match_id_short = record.get("id", "")[:8]
 
-                    with st.expander(f"**{match_no}** {score_icon} 匹配度 {score}/10 | {created}"):
-                        # 编号和ID标识
-                        st.caption(f"匹配ID: {match_id_short}... | 创建时间: {record.get('created_at', '未知')}")
+                    with st.expander(f"**{match_no}** [{match_id_short}] {score_icon} 匹配度 {score}/10 | {created}"):
+                        # 创建时间
+                        st.caption(f"创建时间: {record.get('created_at', '未知')}")
                         # 双列：内容 vs 线索
                         col_a, col_b = st.columns(2)
                         with col_a:
