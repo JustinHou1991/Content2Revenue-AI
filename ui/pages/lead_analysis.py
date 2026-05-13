@@ -266,6 +266,13 @@ class LeadAnalysisPage(AnalysisPage):
         with st.expander("查看清洗后的数据"):
             st.dataframe(df_normalized.head(10))
             
+        # 关键调试：直接显示需求描述列的实际值
+        if "需求描述" in df_normalized.columns:
+            with st.expander("🔧 调试：需求描述列实际值"):
+                actual_values = df_normalized["需求描述"].head(20).tolist()
+                for i, val in enumerate(actual_values):
+                    st.write(f"行{i}: type={type(val).__name__}, repr={repr(val)[:100]}")
+            
         # 调试：显示需求描述列的统计
         if "需求描述" in df_normalized.columns:
             with st.expander("📊 需求描述字段统计"):
