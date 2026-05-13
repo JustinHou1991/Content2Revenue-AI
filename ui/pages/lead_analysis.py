@@ -576,8 +576,16 @@ class LeadAnalysisPage(AnalysisPage):
             st.warning("未检测到有效表格，请尝试按页提取模式")
             return pd.DataFrame()
 
-        headers = all_tables[0]
-        df = pd.DataFrame(all_tables[1:], columns=headers)
+        # 处理不规则表格（列数不一致）
+        max_cols = max(len(row) for row in all_tables)
+        normalized = []
+        for row in all_tables:
+            if len(row) < max_cols:
+                row = row + [""] * (max_cols - len(row))
+            normalized.append(row[:max_cols])
+
+        headers = normalized[0]
+        df = pd.DataFrame(normalized[1:], columns=headers)
         df = df.dropna(how="all")
         df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
 
@@ -637,8 +645,16 @@ class LeadAnalysisPage(AnalysisPage):
             st.warning("未检测到有效表格，请尝试段落提取模式")
             return pd.DataFrame()
 
-        headers = tables_data[0]
-        df = pd.DataFrame(tables_data[1:], columns=headers)
+        # 处理不规则表格（列数不一致）
+        max_cols = max(len(row) for row in tables_data)
+        normalized = []
+        for row in tables_data:
+            if len(row) < max_cols:
+                row = row + [""] * (max_cols - len(row))
+            normalized.append(row[:max_cols])
+
+        headers = normalized[0]
+        df = pd.DataFrame(normalized[1:], columns=headers)
         df = df.dropna(how="all")
         df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
 
