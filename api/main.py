@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from core.auth_manager import AuthManager, AuthConfig, UserRole, UserStatus, create_auth_manager
 from core.tenant_manager import TenantManager, Tenant, TenantPlan
 from core.rate_limiter import RateLimiter
-from core.audit_logger import AuditLogger
+from utils.audit_logger import AuditLogger
 
 # ==================== 配置 ====================
 
