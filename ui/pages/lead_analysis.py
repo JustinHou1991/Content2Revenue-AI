@@ -263,15 +263,27 @@ class LeadAnalysisPage(AnalysisPage):
         # ---- 提取线索数据 ----
         leads = []
         seen_texts = set()
+        skip_reasons = {"empty": 0, "nan": 0, "duplicate": 0}
+        
         for idx, row in df.iterrows():
             # 直接从原始列获取需求描述
             conversation = str(row.get(desc_col, ""))
-            if not conversation or conversation.strip() == "" or conversation.lower() in ["nan", "none", ""]:
+            
+            # 检查为什么被跳过
+            if not conversation:
+                skip_reasons["empty"] += 1
+                continue
+            if conversation.strip() == "":
+                skip_reasons["empty"] += 1
+                continue
+            if conversation.lower() in ["nan", "none", "", "null"]:
+                skip_reasons["nan"] += 1
                 continue
 
             # 过滤重复内容
             conv_key = conversation.strip()[:50]
             if conv_key in seen_texts:
+                skip_reasons["duplicate"] += 1
                 continue
             seen_texts.add(conv_key)
 
@@ -288,6 +300,20 @@ class LeadAnalysisPage(AnalysisPage):
                 "lead_data": lead_data,
                 "lead_id": str(idx),
             })
+        
+        # 显示跳过原因统计
+        if skip_reasons["empty"] > 0 or skip_reasons["nan"] > 0 or skip_reasons["duplicate"] > 0:
+            with st.expander("🔍 数据提取详情"):
+                st.write(f"跳过原因统计：")
+                st.write(f"- 空内容: {skip_reasons['empty']} 行")
+                st.write(f"- NaN/None/Null: {skip_reasons['nan']} 行")
+                st.write(f"- 重复内容: {skip_reasons['duplicate']} 行")
+                # 显示前5条被提取的线索
+                if leads:
+                    st.write(f"---")
+                    st.write(f"✅ 前5条被提取的线索:")
+                    for lead in leads[:5]:
+                        st.write(f"- {lead['lead_data'].get('conversation', '')[:60]}...")
 
         # 显示提取统计
         total_rows = len(df)
@@ -302,72 +328,80 @@ class LeadAnalysisPage(AnalysisPage):
 
         total = len(leads)
 
-        # 每次点击按钮都强制重新初始化（避免复用旧状态）
-        st.session_state.lead_batch_state = {
-            "leads": leads,
-            "total": total,
-            "current": 0,
-            "results": [],
-            "running": True,
-        }
-        logger.info("初始化线索批量分析状态，共 %d 条", total)
+        # 显示进度条
+        progress_bar = st.progress(0, text=f"准备分析 {total} 条线索...")
 
-        state = st.session_state.lead_batch_state
+        # 批量并发分析
+        results = []
+        success_count = 0
+        fail_count = 0
 
-        # 如果已经完成，直接展示结果
-        if not state["running"]:
-            self._show_lead_batch_results(state)
-            return
+        # 使用 ThreadPoolExecutor 并发分析
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
 
-        # 显示进度
-        current = state["current"]
-        progress_bar = st.progress(current / total, text=f"正在分析第 {current + 1}/{total} 条...")
+        # 限制并发数，避免API限流
+        max_workers = min(5, total)
+        completed = 0
+        lock = threading.Lock()
 
-        # 取消按钮
-        if st.button("取消分析", type="secondary"):
-            state["running"] = False
-            callout(f"分析已取消，已完成 {current}/{total} 条", type="warning")
-            progress_bar.empty()
-            self._show_lead_batch_results(state)
-            return
-
-        # 分析当前线索
-        if current < total:
-            lead = state["leads"][current]
+        def analyze_single(lead_item):
+            """分析单条线索"""
+            idx, lead = lead_item
             try:
-                logger.info("正在分析第 %d/%d 条线索 (lead_id=%s)", current + 1, total, lead.get("lead_id"))
-
                 single_result = self._get_orchestrator().lead_analyzer.analyze(
                     lead_data=lead["lead_data"],
                     lead_id=lead.get("lead_id"),
                 )
-
-                logger.info("第 %d 条线索分析完成，lead_id=%s", current + 1, single_result.get("lead_id"))
-
                 # 保存到数据库
                 self._get_orchestrator().db.save_lead_analysis(single_result)
-                state["results"].append({
+                return {
                     "success": True,
-                    "index": current,
+                    "index": idx,
                     "data": single_result,
-                })
+                }
             except Exception as e:
-                logger.error("第 %d 条线索分析失败: %s", current + 1, e)
-                state["results"].append({
+                logger.error("线索分析失败 (lead_id=%s): %s", lead.get("lead_id"), e)
+                return {
                     "success": False,
-                    "index": current,
+                    "index": idx,
                     "error": str(e),
-                })
+                }
 
-            # 更新进度并触发下一次分析
-            state["current"] = current + 1
-            if state["current"] >= total:
-                state["running"] = False
-            st.rerun()
+        # 并发执行分析
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {
+                executor.submit(analyze_single, (i, lead)): i
+                for i, lead in enumerate(leads)
+            }
+
+            for future in as_completed(future_to_idx):
+                result = future.result()
+                results.append(result)
+
+                with lock:
+                    completed += 1
+                    if result["success"]:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+
+                # 更新进度条
+                progress = completed / total
+                progress_bar.progress(progress, text=f"正在分析... {completed}/{total} 条")
 
         # 完成
         progress_bar.empty()
-        self._show_lead_batch_results(state)
+
+        # 保存结果到 session_state 用于展示
+        st.session_state.lead_batch_state = {
+            "leads": leads,
+            "total": total,
+            "results": results,
+            "running": False,
+        }
+
+        self._show_lead_batch_results(st.session_state.lead_batch_state)
 
     def _show_lead_batch_results(self, state: dict):
         """展示线索批量分析结果"""
