@@ -407,6 +407,24 @@ class Database:
                 ON ab_tests(match_id)
             """)
 
+            # 后台任务表 - 支持分析/匹配任务在后台执行
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS background_tasks (
+                    task_id TEXT PRIMARY KEY,
+                    task_type TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    progress INTEGER DEFAULT 0,
+                    total INTEGER DEFAULT 0,
+                    current INTEGER DEFAULT 0,
+                    task_data TEXT,
+                    result TEXT,
+                    error TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT
+                )
+            """)
+
             # 创建常用查询索引
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_created_at ON content_analysis(created_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_lead_created_at ON lead_analysis(created_at)")
