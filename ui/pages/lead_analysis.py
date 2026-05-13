@@ -226,38 +226,62 @@ class LeadAnalysisPage(AnalysisPage):
         # ---- 数据清洗步骤 ----
         st.subheader("数据清洗")
         
-        # 1. 删除完全为空的行
-        df_before = len(df_normalized)
-        df_normalized = df_normalized.dropna(how='all')
-        empty_rows = df_before - len(df_normalized)
+        df_before_total = len(df_normalized)
         
-        # 2. 清理需求描述列（去除前后空格、特殊字符）
+        # 1. 清理需求描述列（去除前后空格、特殊字符）
         # normalize_columns 后，列名已经是标准字段名
         if "需求描述" in df_normalized.columns:
             # 转换为字符串并清理
             df_normalized["需求描述"] = df_normalized["需求描述"].astype(str).str.strip()
-            # 替换常见的空值表示
+            
+            # 统计清洗前的空值数量
+            empty_mask = (
+                (df_normalized["需求描述"] == '') |
+                (df_normalized["需求描述"].str.lower().isin(['nan', 'none', 'null', '无', '-', '--'])) |
+                (df_normalized["需求描述"].isna())
+            )
+            empty_desc_rows = empty_mask.sum()
+            
+            # 替换常见的空值表示为空字符串
             df_normalized["需求描述"] = df_normalized["需求描述"].replace(
-                ['nan', 'None', 'null', 'NULL', '-', '--', '无', ''], 
+                ['nan', 'None', 'null', 'NULL', 'Nan', 'NAN', '-', '--', '无', ''], 
                 ''
             )
-            # 删除清理后为空的行
-            df_before = len(df_normalized)
+            
+            # 删除需求描述为空的行（这是关键字段）
             df_normalized = df_normalized[df_normalized["需求描述"] != '']
-            cleaned_rows = df_before - len(df_normalized)
+            
         else:
-            cleaned_rows = 0
+            empty_desc_rows = 0
+        
+        cleaned_rows = df_before_total - len(df_normalized)
         
         # 显示清洗结果
-        total_cleaned = empty_rows + cleaned_rows
-        if total_cleaned > 0:
-            st.success(f"✅ 数据清洗完成：删除 {empty_rows} 行空数据，清理 {cleaned_rows} 行无效数据，剩余 {len(df_normalized)} 行")
+        if cleaned_rows > 0:
+            st.success(f"✅ 数据清洗完成：共 {df_before_total} 行，删除 {cleaned_rows} 行无效数据（需求描述为空），剩余 {len(df_normalized)} 行")
         else:
             st.info(f"数据清洗完成：共 {len(df_normalized)} 行数据，无需清洗")
         
         # 显示清洗后的数据预览
         with st.expander("查看清洗后的数据"):
             st.dataframe(df_normalized.head(10))
+            
+        # 调试：显示需求描述列的统计
+        if "需求描述" in df_normalized.columns:
+            with st.expander("📊 需求描述字段统计"):
+                desc_lengths = df_normalized["需求描述"].str.len()
+                st.write(f"内容长度统计：")
+                st.write(f"- 最短：{desc_lengths.min()} 字符")
+                st.write(f"- 最长：{desc_lengths.max()} 字符")
+                st.write(f"- 平均：{desc_lengths.mean():.1f} 字符")
+                st.write(f"- 少于10字符的行数：{(desc_lengths < 10).sum()}")
+                st.write(f"- 少于5字符的行数：{(desc_lengths < 5).sum()}")
+                # 显示一些超短内容的样本
+                short_samples = df_normalized[desc_lengths < 10]["需求描述"].head(5).tolist()
+                if short_samples:
+                    st.write("超短内容样本：")
+                    for i, sample in enumerate(short_samples, 1):
+                        st.write(f"  {i}. '{sample}'")
         
         # 准备线索数据（过滤空值、短文本、重复内容）
         leads = []
