@@ -205,7 +205,6 @@ class LeadAnalysisPage(AnalysisPage):
 
     def _handle_batch_analysis(self):
         """处理批量分析逻辑"""
-        from utils.field_mapping import normalize_columns
         import pandas as pd
 
         if st.session_state.lead_field_mapping is None:
@@ -213,172 +212,105 @@ class LeadAnalysisPage(AnalysisPage):
             return
 
         mapping = st.session_state.lead_field_mapping
-        df = st.session_state.lead_df
+        df = st.session_state.lead_df.copy()
 
         # 检查必需的需求描述字段
         if "需求描述" not in mapping:
             callout("缺少必需的'需求描述'字段映射", type="error")
             return
 
-        # 标准化列名
-        df_normalized = normalize_columns(df, {k: v for k, v in mapping.items()})
+        # 获取原始列名
+        desc_col = mapping["需求描述"]  # 如 "最新互动记录"
+
+        if desc_col not in df.columns:
+            callout(f"列 '{desc_col}' 不存在于数据中，请重新选择", type="error")
+            return
 
         # ---- 数据清洗步骤 ----
         st.subheader("数据清洗")
-        
-        df_before_total = len(df_normalized)
-        
-        # 1. 清理需求描述列（去除前后空格、特殊字符）
-        # normalize_columns 后，列名已经是标准字段名
-        if "需求描述" in df_normalized.columns:
-            # 转换为字符串并清理
-            df_normalized["需求描述"] = df_normalized["需求描述"].astype(str).str.strip()
-            
-            # 统计清洗前的空值数量
-            empty_mask = (
-                (df_normalized["需求描述"] == '') |
-                (df_normalized["需求描述"].str.lower().isin(['nan', 'none', 'null', '无', '-', '--'])) |
-                (df_normalized["需求描述"].isna())
-            )
-            empty_desc_rows = empty_mask.sum()
-            
-            # 替换常见的空值表示为空字符串
-            df_normalized["需求描述"] = df_normalized["需求描述"].replace(
-                ['nan', 'None', 'null', 'NULL', 'Nan', 'NAN', '-', '--', '无', ''], 
-                ''
-            )
-            
-            # 删除需求描述为空的行（这是关键字段）
-            df_normalized = df_normalized[df_normalized["需求描述"] != '']
-            
-        else:
-            empty_desc_rows = 0
-        
-        cleaned_rows = df_before_total - len(df_normalized)
-        
-        # 显示清洗结果
+
+        df_before_total = len(df)
+
+        # 1. 将需求描述列转为字符串并清理
+        df[desc_col] = df[desc_col].astype(str).str.strip()
+
+        # 统计空值
+        empty_mask = (
+            (df[desc_col] == '') |
+            (df[desc_col].str.lower().isin(['nan', 'none', 'null', '无', '-', '--', 'nat'])) |
+            (df[desc_col].isna())
+        )
+        empty_count = empty_mask.sum()
+
+        # 替换空值为空字符串，然后删除空行
+        df[desc_col] = df[desc_col].replace(
+            ['nan', 'None', 'null', 'NULL', 'Nan', 'NAN', '-', '--', '无', '', 'nat'],
+            ''
+        )
+        df = df[df[desc_col] != ''].reset_index(drop=True)
+
+        cleaned_rows = df_before_total - len(df)
+
         if cleaned_rows > 0:
-            st.success(f"✅ 数据清洗完成：共 {df_before_total} 行，删除 {cleaned_rows} 行无效数据（需求描述为空），剩余 {len(df_normalized)} 行")
+            st.success(f"✅ 数据清洗完成：共 {df_before_total} 行，删除 {cleaned_rows} 行无效数据（需求描述为空），剩余 {len(df)} 行")
         else:
-            st.info(f"数据清洗完成：共 {len(df_normalized)} 行数据，无需清洗")
-        
+            st.info(f"数据清洗完成：共 {len(df)} 行数据，无需清洗")
+
         # 显示清洗后的数据预览
         with st.expander("查看清洗后的数据"):
-            st.dataframe(df_normalized.head(10))
-            
-        # 关键调试：直接显示需求描述列的实际值
-        if "需求描述" in df_normalized.columns:
-            with st.expander("🔧 调试：需求描述列实际值"):
-                actual_values = df_normalized["需求描述"].head(20).tolist()
-                for i, val in enumerate(actual_values):
-                    st.write(f"行{i}: type={type(val).__name__}, repr={repr(val)[:100]}")
-            
-        # 调试：显示需求描述列的统计
-        if "需求描述" in df_normalized.columns:
-            with st.expander("📊 需求描述字段统计"):
-                desc_lengths = df_normalized["需求描述"].str.len()
-                st.write(f"内容长度统计：")
-                st.write(f"- 最短：{desc_lengths.min()} 字符")
-                st.write(f"- 最长：{desc_lengths.max()} 字符")
-                st.write(f"- 平均：{desc_lengths.mean():.1f} 字符")
-                st.write(f"- 少于10字符的行数：{(desc_lengths < 10).sum()}")
-                st.write(f"- 少于5字符的行数：{(desc_lengths < 5).sum()}")
-                # 显示一些超短内容的样本
-                short_samples = df_normalized[desc_lengths < 10]["需求描述"].head(5).tolist()
-                if short_samples:
-                    st.write("超短内容样本：")
-                    for i, sample in enumerate(short_samples, 1):
-                        st.write(f"  {i}. '{sample}'")
-        
-        # 准备线索数据（过滤空值、短文本、重复内容）
+            st.dataframe(df.head(10))
+
+        # ---- 提取线索数据 ----
         leads = []
         seen_texts = set()
-        for idx, row in df_normalized.iterrows():
-            lead_data = {}
+        for idx, row in df.iterrows():
+            # 直接从原始列获取需求描述
+            conversation = str(row.get(desc_col, ""))
+            if not conversation or conversation.strip() == "" or conversation.lower() in ["nan", "none", ""]:
+                continue
 
-            # 优先使用需求描述字段（只要有任何内容即可）
-            if "需求描述" in mapping:
-                conversation = str(row.get("需求描述", ""))
-                if conversation and conversation.strip() and conversation.lower() not in ["nan", "none", ""]:
-                    lead_data["conversation"] = conversation.strip()
+            # 过滤重复内容
+            conv_key = conversation.strip()[:50]
+            if conv_key in seen_texts:
+                continue
+            seen_texts.add(conv_key)
 
-            # 添加其他字段
-            for standard_field, original_col in mapping.items():
-                if original_col in df.columns:
-                    value = row.get(standard_field, "")
-                    if pd.notna(value) and str(value).lower() != "nan":
-                        # 映射标准字段到lead_data的键名
-                        field_key_map = {
-                            "联系人": "name",
-                            "公司名称": "company",
-                            "行业": "industry",
-                            "需求描述": "conversation",
-                        }
-                        key = field_key_map.get(standard_field, standard_field)
-                        lead_data[key] = str(value)
-
-            if lead_data and lead_data.get("conversation"):
-                # 过滤重复内容
-                conv_key = lead_data["conversation"][:50]
-                if conv_key in seen_texts:
+            # 构建 lead_data，包含所有列的数据
+            lead_data = {"conversation": conversation.strip()}
+            for col_name in df.columns:
+                if col_name == desc_col:
                     continue
-                seen_texts.add(conv_key)
-                leads.append({
-                    "lead_data": lead_data,
-                    "lead_id": str(idx),
-                })
+                val = row.get(col_name, "")
+                if pd.notna(val) and str(val).strip() and str(val).strip().lower() not in ["nan", "none", ""]:
+                    lead_data[col_name] = str(val).strip()
+
+            leads.append({
+                "lead_data": lead_data,
+                "lead_id": str(idx),
+            })
 
         # 显示提取统计
-        total_rows = len(df_normalized)
+        total_rows = len(df)
         extracted_count = len(leads)
         skipped_count = total_rows - extracted_count
-        
+
         st.info(f"数据提取统计: 共 {total_rows} 行, 有效 {extracted_count} 行, 跳过 {skipped_count} 行")
-        
-        if skipped_count > 0:
-            st.caption("提示: 跳过的行可能是因为描述内容为空")
-            
-            # 显示被跳过的数据样本（从原始df中取样）
-            with st.expander("🔍 查看被跳过的数据样本"):
-                st.write("显示原始数据中需求描述列的前10条（用于诊断）:")
-                original_desc_col = mapping.get("需求描述", "需求描述")
-                if original_desc_col in df.columns:
-                    preview_data = []
-                    for i, (idx, row) in enumerate(df.head(10).iterrows()):
-                        desc_val = str(row.get(original_desc_col, ""))
-                        is_extracted = any(l["lead_id"] == str(idx) for l in leads)
-                        preview_data.append({
-                            "行号": idx + 1,
-                            "原始内容": desc_val[:80] if desc_val else "(空)",
-                            "长度": len(desc_val),
-                            "是否被提取": "✅" if is_extracted else "❌"
-                        })
-                    import pandas as pd
-                    st.dataframe(pd.DataFrame(preview_data))
-                    
-                    # 显示被提取的线索
-                    if leads:
-                        st.write("---")
-                        st.write(f"✅ 被成功提取的 {len(leads)} 条线索:")
-                        for lead in leads:
-                            st.write(f"- 行{lead['lead_id']}: {lead['lead_data'].get('conversation', '')[:50]}...")
 
         if not leads:
-            callout("未找到有效的线索数据，请检查字段映射", type="error")
+            callout("未找到有效的线索数据", type="error")
             return
 
         total = len(leads)
 
-        # 初始化批量分析状态
-        if "lead_batch_state" not in st.session_state or st.session_state.lead_batch_state.get("total") != total:
-            st.session_state.lead_batch_state = {
-                "leads": leads,
-                "total": total,
-                "current": 0,
-                "results": [],
-                "running": True,
-            }
-            logger.info("初始化线索批量分析状态，共 %d 条", total)
+        # 每次点击按钮都强制重新初始化（避免复用旧状态）
+        st.session_state.lead_batch_state = {
+            "leads": leads,
+            "total": total,
+            "current": 0,
+            "results": [],
+            "running": True,
+        }
+        logger.info("初始化线索批量分析状态，共 %d 条", total)
 
         state = st.session_state.lead_batch_state
 
