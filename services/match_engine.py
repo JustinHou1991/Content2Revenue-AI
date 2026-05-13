@@ -307,20 +307,34 @@ class MatchEngine(BaseAnalyzer):
             logger.warning("线索列表为空，跳过批量匹配")
             return []
 
-        # ---- 过滤无效线索（关键字段缺失或为空）----
+        # ---- 过滤无效线索（只要有核心画像数据即可）----
         valid_leads = []
         skipped_leads = 0
         sample_invalid = None
         for lead in leads:
             lead_profile = lead.get("profile", lead)
-            # 检查关键字段：行业、公司阶段、决策角色、购买阶段
-            key_fields = ["industry", "company_stage", "role", "buying_stage"]
+            # 检查是否有任何有价值的画像数据
+            # 包括：痛点、意向信号、需求描述、建议策略等
+            check_fields = [
+                "pain_points", "intent_signals", "recommended_content_type",
+                "engagement_strategy", "decision_criteria", "objection_risks"
+            ]
             has_valid_data = False
-            for field in key_fields:
-                value = lead_profile.get(field, "")
-                if value and value != "未知" and str(value).strip():
+
+            # 检查列表字段是否有内容
+            for field in check_fields:
+                value = lead_profile.get(field)
+                if isinstance(value, list) and len(value) > 0:
                     has_valid_data = True
                     break
+                if isinstance(value, str) and value and value != "未知":
+                    has_valid_data = True
+                    break
+
+            # 或者检查是否有评分（只要有评分就说明分析完成）
+            lead_score = lead_profile.get("lead_score", 0)
+            if lead_score and lead_score > 0:
+                has_valid_data = True
 
             if has_valid_data:
                 valid_leads.append(lead)
@@ -337,7 +351,7 @@ class MatchEngine(BaseAnalyzer):
 
         leads = valid_leads
         if not leads:
-            logger.warning("没有有效的线索可供匹配（所有线索的关键字段都为空）")
+            logger.warning("没有有效的线索可供匹配（所有线索都缺少画像数据）")
             return []
 
         # ---- 构建所有待匹配任务（带原始索引，保证结果顺序） ----
