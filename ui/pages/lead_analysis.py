@@ -6,7 +6,10 @@
 
 import streamlit as st
 import threading
+import logging
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from ui.base_page import AnalysisPage
 from ui.components.forms import render_lead_form, render_action_buttons

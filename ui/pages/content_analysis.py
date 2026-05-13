@@ -6,6 +6,9 @@
 
 import streamlit as st
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 from ui.base_page import AnalysisPage
 from ui.components.forms import render_text_area, render_action_buttons
