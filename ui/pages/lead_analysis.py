@@ -260,6 +260,14 @@ class LeadAnalysisPage(AnalysisPage):
         with st.expander("查看清洗后的数据"):
             st.dataframe(df.head(10))
 
+        # ---- 关键调试：直接检查 desc_col 的数据 ----
+        st.write(f"**调试信息：** 选择的列为 `{desc_col}`，该列存在于 DataFrame: {desc_col in df.columns}")
+        if desc_col in df.columns:
+            sample_vals = df[desc_col].head(10).tolist()
+            st.write(f"前10个值:")
+            for i, v in enumerate(sample_vals):
+                st.write(f"  [{i}] type={type(v).__name__}, len={len(str(v))}, val={repr(v)[:80]}")
+
         # ---- 提取线索数据 ----
         leads = []
         seen_texts = set()
