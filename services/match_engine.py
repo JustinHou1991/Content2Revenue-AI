@@ -310,6 +310,7 @@ class MatchEngine(BaseAnalyzer):
         # ---- 过滤无效线索（关键字段缺失或为空）----
         valid_leads = []
         skipped_leads = 0
+        sample_invalid = None
         for lead in leads:
             lead_profile = lead.get("profile", lead)
             # 检查关键字段：行业、公司阶段、决策角色、购买阶段
@@ -325,11 +326,14 @@ class MatchEngine(BaseAnalyzer):
                 valid_leads.append(lead)
             else:
                 skipped_leads += 1
+                if sample_invalid is None:
+                    sample_invalid = lead_profile
                 lead_id = lead.get("lead_id", "unknown")
-                logger.debug("跳过无效线索: lead_id=%s, profile=%s", lead_id, lead_profile)
+                logger.debug("跳过无效线索: lead_id=%s", lead_id)
 
-        if skipped_leads > 0:
-            logger.warning("过滤掉 %d 条无效线索（关键字段缺失），剩余 %d 条有效线索", skipped_leads, len(valid_leads))
+        logger.info("线索过滤: 原始 %d 条, 有效 %d 条, 跳过 %d 条", len(leads), len(valid_leads), skipped_leads)
+        if skipped_leads > 0 and sample_invalid:
+            logger.info("无效线索示例: %s", sample_invalid)
 
         leads = valid_leads
         if not leads:

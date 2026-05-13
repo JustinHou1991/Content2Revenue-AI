@@ -176,12 +176,24 @@ class MatchCenterPage(MatchPage):
                     progress_bar.empty()
 
                     if not results:
-                        callout("没有可匹配的内容或线索", type="warning")
-                        st.info("提示：请确保已存在至少一条内容分析和一条线索分析记录。")
+                        callout("没有可匹配的有效线索", type="warning")
+                        st.info("""提示：
+1. 请确保已存在至少一条内容分析和一条线索分析记录
+2. 线索分析时，确保 LLM 能正确提取行业、公司阶段、决策角色等信息
+3. 如果线索数据质量较差，建议重新进行线索分析""")
+                        return
+
+                    # 统计有效/无效线索数量
+                    valid_count = len([r for r in results if r.get("lead_snapshot", {}).get("lead_grade") not in ["?", None, ""]])
+                    total_count = len(results)
+
+                    if valid_count == 0:
+                        callout("所有线索都缺少关键信息，无法生成有价值的匹配结果", type="warning")
+                        st.info("建议：重新分析线索数据，确保能提取到行业、公司阶段等关键字段")
                         return
 
                     callout(
-                        f"批量匹配完成！共匹配 {len(results)} 条线索",
+                        f"批量匹配完成！共匹配 {total_count} 条线索（其中 {valid_count} 条有完整信息）",
                         type="success",
                         icon="&#10003;",
                     )
