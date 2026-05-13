@@ -164,33 +164,58 @@ class LeadAnalysisPage(AnalysisPage):
             col_options = ["-- 请选择 --"] + list(df.columns)
             default_idx = col_options.index(auto_col) if auto_col and auto_col in col_options else 0
 
+            # 主分析列（必需选择）
             selected_col = st.selectbox(
-                "线索描述列",
+                "📌 主分析列（必需）",
                 col_options,
                 index=default_idx,
-                help="选择包含线索需求/对话内容的列",
+                help="选择包含客户主要需求/留言内容的列，系统将以此列内容作为分析基础",
+            )
+
+            # 参考列（可选多选）
+            other_cols = [c for c in df.columns if c != selected_col and c != "-- 请选择 --"]
+            reference_cols = st.multiselect(
+                "📋 参考列（可选）",
+                options=other_cols,
+                default=[],
+                help="选择额外的参考列（如公司名称、联系人、电话等），系统将结合多列内容进行综合分析。不选择则仅使用主分析列。",
             )
 
             if selected_col != "-- 请选择 --":
-                st.session_state.lead_field_mapping = {"需求描述": selected_col}
-                st.success(f"✅ 已选择「{selected_col}」作为线索描述列（共 {len(df)} 条记录）")
+                # 合并主列和参考列
+                all_selected_cols = [selected_col] + reference_cols
+                st.session_state.lead_field_mapping = {"需求描述": selected_col, "参考列": reference_cols}
+                
+                cols_info = f"主列「{selected_col}」"
+                if reference_cols:
+                    cols_info += f" + {len(reference_cols)} 个参考列"
+                st.success(f"✅ 已设置分析列（共 {len(df)} 条记录）: {cols_info}")
 
-                # 预览前5条数据，帮助用户确认选择正确
-                with st.expander("预览数据（请确认内容是否为客户需求）"):
+                # 预览数据，帮助用户确认选择正确
+                with st.expander("👁️ 预览数据内容"):
+                    # 显示主分析列前5条
+                    st.write("**主分析列预览：**")
                     preview_data = df[selected_col].head(5).tolist()
                     for i, val in enumerate(preview_data, 1):
                         val_str = str(val)[:100] if val else "(空)"
                         st.write(f"{i}. {val_str}")
                     
+                    # 显示参考列前5条
+                    if reference_cols:
+                        st.write("**参考列预览：**")
+                        for ref_col in reference_cols[:3]:  # 最多显示3个参考列
+                            ref_vals = df[ref_col].head(3).tolist()
+                            st.write(f"- {ref_col}: {ref_vals}")
+                    
                     # 检查是否包含抖音系统消息
                     system_keywords = ["在抖音", "发起了", "输入了手机号"]
                     has_system_msg = any(any(kw in str(v) for kw in system_keywords) for v in preview_data if v)
                     if has_system_msg:
-                        st.warning("⚠️ 检测到抖音系统消息（如'在抖音私信输入了手机号'）。这些不是客户需求，请尝试选择其他列，如'客户留言'、'咨询内容'等。")
+                        st.warning("⚠️ 检测到抖音系统消息，这些不是客户需求。如果主分析列选择错误，请重新选择包含客户留言的列。")
 
                 # 批量分析按钮
                 batch_btn = st.button(
-                    f"开始批量分析（{len(df)} 条线索）",
+                    f"🚀 开始批量分析（{len(df)} 条线索）",
                     type="primary",
                     use_container_width=True,
                 )
@@ -220,10 +245,11 @@ class LeadAnalysisPage(AnalysisPage):
             return
 
         # 获取原始列名
-        desc_col = mapping["需求描述"]  # 如 "最新互动记录"
+        desc_col = mapping.get("需求描述")  # 主分析列，如 "最新互动记录"
+        reference_cols = mapping.get("参考列", [])  # 参考列列表
 
-        if desc_col not in df.columns:
-            callout(f"列 '{desc_col}' 不存在于数据中，请重新选择", type="error")
+        if not desc_col or desc_col not in df.columns:
+            callout(f"主分析列不存在，请重新选择", type="error")
             return
 
         # ---- 数据清洗步骤 ----
@@ -231,10 +257,17 @@ class LeadAnalysisPage(AnalysisPage):
 
         df_before_total = len(df)
 
-        # 1. 将需求描述列转为字符串并清理
-        df[desc_col] = df[desc_col].astype(str).str.strip()
+        # 1. 将所有选择的列转为字符串并清理
+        all_cols_to_clean = [desc_col] + reference_cols
+        for col in all_cols_to_clean:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
+                df[col] = df[col].replace(
+                    ['nan', 'None', 'null', 'NULL', 'Nan', 'NAN', '-', '--', '无', '', 'nat'],
+                    ''
+                )
 
-        # 统计空值
+        # 统计主列空值
         empty_mask = (
             (df[desc_col] == '') |
             (df[desc_col].str.lower().isin(['nan', 'none', 'null', '无', '-', '--', 'nat'])) |
@@ -242,23 +275,21 @@ class LeadAnalysisPage(AnalysisPage):
         )
         empty_count = empty_mask.sum()
 
-        # 替换空值为空字符串，然后删除空行
-        df[desc_col] = df[desc_col].replace(
-            ['nan', 'None', 'null', 'NULL', 'Nan', 'NAN', '-', '--', '无', '', 'nat'],
-            ''
-        )
-        df = df[df[desc_col] != ''].reset_index(drop=True)
+        # 删除主列为空的行
+        df = df[~empty_mask].reset_index(drop=True)
 
         cleaned_rows = df_before_total - len(df)
 
         if cleaned_rows > 0:
-            st.success(f"✅ 数据清洗完成：共 {df_before_total} 行，删除 {cleaned_rows} 行无效数据（需求描述为空），剩余 {len(df)} 行")
+            st.success(f"✅ 数据清洗完成：共 {df_before_total} 行，删除 {cleaned_rows} 行无效数据，剩余 {len(df)} 行")
         else:
             st.info(f"数据清洗完成：共 {len(df)} 行数据，无需清洗")
 
         # 显示清洗后的数据预览
         with st.expander("查看清洗后的数据"):
-            st.dataframe(df.head(10))
+            preview_cols = [desc_col] + reference_cols[:3]  # 主列 + 最多3个参考列
+            preview_cols = [c for c in preview_cols if c in df.columns]
+            st.dataframe(df[preview_cols].head(10))
 
         # ---- 提取线索数据 ----
         leads = []
@@ -275,35 +306,48 @@ class LeadAnalysisPage(AnalysisPage):
         ]
         
         for idx, row in df.iterrows():
-            # 直接从原始列获取需求描述
-            conversation = str(row.get(desc_col, ""))
+            # 合并主列和参考列的内容作为完整线索
+            conversation_parts = []
+            
+            # 主分析列内容
+            main_content = str(row.get(desc_col, "")).strip()
+            if main_content and main_content.lower() not in ["nan", "none", "null", ""]:
+                conversation_parts.append(f"[{desc_col}] {main_content}")
+            
+            # 参考列内容
+            for ref_col in reference_cols:
+                if ref_col in df.columns:
+                    ref_content = str(row.get(ref_col, "")).strip()
+                    if ref_content and ref_content.lower() not in ["nan", "none", "null", ""]:
+                        conversation_parts.append(f"[{ref_col}] {ref_content}")
+            
+            # 合并所有内容
+            conversation = " | ".join(conversation_parts)
             
             # 检查为什么被跳过
-            if not conversation:
-                skip_reasons["empty"] += 1
-                continue
-            if conversation.strip() == "":
+            if not conversation or conversation.strip() == "":
                 skip_reasons["empty"] += 1
                 continue
             if conversation.lower() in ["nan", "none", "", "null"]:
                 skip_reasons["nan"] += 1
                 continue
             
-            # 过滤抖音系统消息
-            is_system_msg = any(keyword in conversation for keyword in system_keywords)
-            if is_system_msg:
-                skip_reasons["system_msg"] += 1
-                continue
+            # 过滤抖音系统消息（仅检查主列）
+            if main_content:
+                is_system_msg = any(keyword in main_content for keyword in system_keywords)
+                if is_system_msg:
+                    skip_reasons["system_msg"] += 1
+                    continue
 
             # 过滤重复内容
-            conv_key = conversation.strip()[:50]
+            conv_key = main_content.strip()[:50] if main_content else conversation.strip()[:50]
             if conv_key in seen_texts:
                 skip_reasons["duplicate"] += 1
                 continue
             seen_texts.add(conv_key)
 
-            # 构建 lead_data，包含所有列的数据
-            lead_data = {"conversation": conversation.strip()}
+            # 构建 lead_data，包含所有列的原始数据
+            lead_data = {"conversation": conversation}
             for col_name in df.columns:
                 if col_name == desc_col:
                     continue
