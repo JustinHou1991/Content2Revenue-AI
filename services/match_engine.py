@@ -307,47 +307,24 @@ class MatchEngine(BaseAnalyzer):
             logger.warning("线索列表为空，跳过批量匹配")
             return []
 
-        # ---- 过滤无效线索（只要有核心画像数据即可）----
+        # ---- 线索数据验证 ----
+        # 只要线索有 profile 数据（无论内容如何），就参与匹配
+        # 不过滤，让匹配引擎决定哪些线索有价值
         valid_leads = []
-        skipped_leads = 0
-        sample_invalid = None
+        empty_profile_count = 0
+        
         for lead in leads:
-            lead_profile = lead.get("profile", lead)
-            # 检查是否有任何有价值的画像数据
-            # 包括：痛点、意向信号、需求描述、建议策略等
-            check_fields = [
-                "pain_points", "intent_signals", "recommended_content_type",
-                "engagement_strategy", "decision_criteria", "objection_risks"
-            ]
-            has_valid_data = False
-
-            # 检查列表字段是否有内容
-            for field in check_fields:
-                value = lead_profile.get(field)
-                if isinstance(value, list) and len(value) > 0:
-                    has_valid_data = True
-                    break
-                if isinstance(value, str) and value and value != "未知":
-                    has_valid_data = True
-                    break
-
-            # 或者检查是否有评分（只要有评分就说明分析完成）
-            lead_score = lead_profile.get("lead_score", 0)
-            if lead_score and lead_score > 0:
-                has_valid_data = True
-
-            if has_valid_data:
+            lead_profile = lead.get("profile")
+            # 检查 profile 是否存在且不为空
+            if lead_profile and isinstance(lead_profile, dict) and len(lead_profile) > 0:
                 valid_leads.append(lead)
             else:
-                skipped_leads += 1
-                if sample_invalid is None:
-                    sample_invalid = lead_profile
+                empty_profile_count += 1
                 lead_id = lead.get("lead_id", "unknown")
-                logger.debug("跳过无效线索: lead_id=%s", lead_id)
+                logger.debug("跳过无画像线索: lead_id=%s", lead_id)
 
-        logger.info("线索过滤: 原始 %d 条, 有效 %d 条, 跳过 %d 条", len(leads), len(valid_leads), skipped_leads)
-        if skipped_leads > 0 and sample_invalid:
-            logger.info("无效线索示例: %s", sample_invalid)
+        if empty_profile_count > 0:
+            logger.warning("跳过 %d 条无画像线索，剩余 %d 条", empty_profile_count, len(valid_leads))
 
         leads = valid_leads
         if not leads:
