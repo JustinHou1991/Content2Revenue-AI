@@ -169,73 +169,113 @@ class MatchCenterPage(MatchPage):
 
         top_k = st.slider("每个线索返回的匹配数量", 1, 10, 3)
 
-        if st.button("开始批量匹配", type="primary", use_container_width=True):
-            progress_bar = st.progress(0, text="正在批量匹配...")
-            with st.spinner("正在批量匹配，这可能需要一些时间..."):
-                try:
-                    results = self._get_orchestrator().batch_match(top_k=top_k)
-                    progress_bar.progress(1.0, text="匹配完成！")
-                    progress_bar.empty()
+        # 检查是否有进行中的任务
+        current_task_id = st.session_state.get("batch_match_task_id")
+        if current_task_id:
+            from ui.components.task_monitor import check_and_resume_task
+            task = check_and_resume_task(current_task_id)
+            if task:
+                status = task.get("status")
+                if status == "completed":
+                    st.success("✅ 批量匹配已完成！")
+                    st.session_state.batch_match_task_id = None
+                    # 显示结果
+                    result = task.get("result", {})
+                    if result:
+                        self._render_batch_match_results(result.get("results", []))
+                    return
+                elif status == "failed":
+                    st.error(f"❌ 批量匹配失败: {task.get('error', '未知错误')}")
+                    st.session_state.batch_match_task_id = None
+                    return
+                elif status == "running":
+                    if st.button("🔄 刷新进度", type="primary"):
+                        st.rerun()
+                    return
 
-                    if not results:
-                        callout("没有可匹配的有效线索", type="warning")
-                        st.info("""提示：
+        if st.button("开始批量匹配", type="primary", use_container_width=True):
+            # 提交后台任务
+            from services.task_manager import get_task_manager, TaskType
+            
+            task_manager = get_task_manager(self._get_orchestrator().db)
+            
+            task_data = {
+                "top_k": top_k,
+            }
+            
+            task_id = task_manager.submit_task(
+                task_type=TaskType.BATCH_MATCH,
+                task_data=task_data,
+            )
+            
+            st.session_state.batch_match_task_id = task_id
+            
+            st.success(f"✅ 批量匹配任务已提交！")
+            st.info(f"📋 任务ID: {task_id[:8]}...")
+            st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。")
+            
+            st.progress(0, text="准备批量匹配...")
+            
+            if st.button("🔄 刷新进度", type="primary"):
+                st.rerun()
+
+    def _render_batch_match_results(self, results):
+        """渲染批量匹配结果"""
+        if not results:
+            callout("没有可匹配的有效线索", type="warning")
+            st.info("""提示：
 1. 请确保已存在至少一条内容分析和一条线索分析记录
 2. 线索分析可能未完成或数据为空，建议重新进行线索分析
 3. 检查线索数据是否包含有效的需求描述或对话内容""")
-                        return
+            return
 
-                    callout(
-                        f"批量匹配完成！共匹配 {len(results)} 条线索",
-                        type="success",
-                        icon="&#10003;",
-                    )
+        callout(
+            f"批量匹配完成！共匹配 {len(results)} 条线索",
+            type="success",
+            icon="&#10003;",
+        )
 
-                    for idx, r in enumerate(results, 1):
-                        lead_snap = r.get("lead_snapshot", {})
-                        lid = lead_snap.get("lead_id", "")[:8]
-                        company = lead_snap.get("company", "未知")
-                        industry = lead_snap.get("industry", "未知")
-                        grade = lead_snap.get("lead_grade", "?")
+        for idx, r in enumerate(results, 1):
+            lead_snap = r.get("lead_snapshot", {})
+            lid = lead_snap.get("lead_id", "")[:8]
+            company = lead_snap.get("company", "未知")
+            industry = lead_snap.get("industry", "未知")
+            grade = lead_snap.get("lead_grade", "?")
 
-                        grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
-                        title = f"**#{idx}** [{lid}] {grade_icon} {grade}级 | {company}"
-                        if industry and industry != "未知":
-                            title += f" ({industry})"
+            grade_icon = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
+            title = f"**#{idx}** [{lid}] {grade_icon} {grade}级 | {company}"
+            if industry and industry != "未知":
+                title += f" ({industry})"
 
-                        with st.expander(title):
-                            # 线索摘要
-                            with st.container():
-                                st.markdown("**👤 线索信息**")
-                                _render_lead_snapshot(lead_snap)
+            with st.expander(title):
+                # 线索摘要
+                with st.container():
+                    st.markdown("**👤 线索信息**")
+                    _render_lead_snapshot(lead_snap)
 
-                            for i, match in enumerate(r.get("top_matches", [])):
-                                mr = match.get("match_result", {})
-                                score = mr.get("overall_score", 0)
-                                content_snap = match.get("content_snapshot", {})
+                for i, match in enumerate(r.get("top_matches", [])):
+                    mr = match.get("match_result", {})
+                    score = mr.get("overall_score", 0)
+                    content_snap = match.get("content_snapshot", {})
 
-                                st.markdown("---")
-                                score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
-                                st.markdown(f"**{score_icon} #{i+1} 匹配度: {score}/10**")
+                    st.markdown("---")
+                    score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
+                    st.markdown(f"**{score_icon} #{i+1} 匹配度: {score}/10**")
 
-                                # 内容摘要
-                                st.markdown("**📝 匹配内容**")
-                                _render_content_snapshot(content_snap)
+                    # 内容摘要
+                    st.markdown("**📝 匹配内容**")
+                    _render_content_snapshot(content_snap)
 
-                                # 匹配原因
-                                reason = mr.get("match_reason", "")
-                                if reason:
-                                    st.markdown("**匹配分析**")
-                                    st.write(reason)
+                    # 匹配原因
+                    reason = mr.get("match_reason", "")
+                    if reason:
+                        st.markdown("**匹配分析**")
+                        st.write(reason)
 
-                                # 维度评分
-                                ds = mr.get("dimension_scores", {})
-                                if ds:
-                                    self._render_dimension_scores(ds, columns=5)
-
-                except Exception as e:
-                    progress_bar.empty()
-                    callout(f"批量匹配失败: {str(e)}", type="error")
+                    # 维度评分
+                    ds = mr.get("dimension_scores", {})
+                    if ds:
+                        self._render_dimension_scores(ds, columns=5)
 
     def _display_match_result(self, result: dict):
         """展示单对匹配结果（含内容和线索详情）"""

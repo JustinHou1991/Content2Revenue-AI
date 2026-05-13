@@ -393,80 +393,52 @@ class LeadAnalysisPage(AnalysisPage):
 
         total = len(leads)
 
-        # 显示进度条
-        progress_bar = st.progress(0, text=f"准备分析 {total} 条线索...")
+        # 检查是否有进行中的任务
+        current_task_id = st.session_state.get("lead_analysis_task_id")
+        if current_task_id:
+            from ui.components.task_monitor import check_and_resume_task, render_task_result
+            task = check_and_resume_task(current_task_id)
+            if task:
+                status = task.get("status")
+                if status in ["completed", "failed", "cancelled"]:
+                    # 任务已完成，显示结果
+                    render_task_result(task)
+                    st.session_state.lead_analysis_task_id = None
+                    return
+                elif status == "running":
+                    # 任务仍在运行，添加刷新按钮
+                    if st.button("🔄 刷新进度", type="primary"):
+                        st.rerun()
+                    return
 
-        # 批量并发分析
-        results = []
-        success_count = 0
-        fail_count = 0
-
-        # 使用 ThreadPoolExecutor 并发分析
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import threading
-
-        # 限制并发数，避免API限流
-        max_workers = min(5, total)
-        completed = 0
-        lock = threading.Lock()
-
-        def analyze_single(lead_item):
-            """分析单条线索"""
-            idx, lead = lead_item
-            try:
-                single_result = self._get_orchestrator().lead_analyzer.analyze(
-                    lead_data=lead["lead_data"],
-                    lead_id=lead.get("lead_id"),
-                )
-                # 保存到数据库
-                self._get_orchestrator().db.save_lead_analysis(single_result)
-                return {
-                    "success": True,
-                    "index": idx,
-                    "data": single_result,
-                }
-            except Exception as e:
-                logger.error("线索分析失败 (lead_id=%s): %s", lead.get("lead_id"), e)
-                return {
-                    "success": False,
-                    "index": idx,
-                    "error": str(e),
-                }
-
-        # 并发执行分析
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_idx = {
-                executor.submit(analyze_single, (i, lead)): i
-                for i, lead in enumerate(leads)
-            }
-
-            for future in as_completed(future_to_idx):
-                result = future.result()
-                results.append(result)
-
-                with lock:
-                    completed += 1
-                    if result["success"]:
-                        success_count += 1
-                    else:
-                        fail_count += 1
-
-                # 更新进度条
-                progress = completed / total
-                progress_bar.progress(progress, text=f"正在分析... {completed}/{total} 条")
-
-        # 完成
-        progress_bar.empty()
-
-        # 保存结果到 session_state 用于展示
-        st.session_state.lead_batch_state = {
+        # 提交后台任务
+        from services.task_manager import get_task_manager, TaskType
+        from ui.components.task_monitor import render_task_result
+        
+        task_manager = get_task_manager(self._get_orchestrator().db)
+        
+        task_data = {
             "leads": leads,
             "total": total,
-            "results": results,
-            "running": False,
         }
-
-        self._show_lead_batch_results(st.session_state.lead_batch_state)
+        
+        task_id = task_manager.submit_task(
+            task_type=TaskType.LEAD_ANALYSIS,
+            task_data=task_data,
+        )
+        
+        st.session_state.lead_analysis_task_id = task_id
+        
+        st.success(f"✅ 任务已提交到后台执行！")
+        st.info(f"📋 任务ID: {task_id[:8]}...")
+        st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。返回此页面可查看进度。")
+        
+        # 显示初始进度
+        st.progress(0, text=f"准备分析 {total} 条线索...")
+        
+        # 添加刷新按钮
+        if st.button("🔄 刷新进度", type="primary"):
+            st.rerun()
 
     def _show_lead_batch_results(self, state: dict):
         """展示线索批量分析结果"""

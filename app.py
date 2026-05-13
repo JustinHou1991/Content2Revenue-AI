@@ -207,6 +207,14 @@ def main():
         """
         st.markdown(hide_streamlit_default, unsafe_allow_html=True)
 
+    # ============ 全局任务监控 ============
+    # 在侧边栏显示进行中的后台任务
+    try:
+        from ui.components.task_monitor import render_task_monitor
+        render_task_monitor()
+    except Exception as e:
+        logger.warning(f"任务监控加载失败: {e}")
+
     # ============ 页面路由 ============
     try:
         if current_page == "📊 仪表盘":
