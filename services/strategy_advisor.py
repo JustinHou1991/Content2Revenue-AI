@@ -217,7 +217,31 @@ class StrategyAdvisor(BaseAnalyzer):
     "variant_b": "方案B描述",
     "test_metric": "测试指标",
     "recommended_sample_size": "建议样本量"
-  }}
+  }},
+  "execution_checklist": [
+    {{
+      "step": 1,
+      "action": "第一步具体行动",
+      "detail": "详细操作说明",
+      "priority": "high/medium/low",
+      "estimated_time": "预计耗时"
+    }},
+    {{
+      "step": 2,
+      "action": "第二步具体行动",
+      "detail": "详细操作说明",
+      "priority": "high/medium/low",
+      "estimated_time": "预计耗时"
+    }},
+    {{
+      "step": 3,
+      "action": "第三步具体行动",
+      "detail": "详细操作说明",
+      "priority": "high/medium/low",
+      "estimated_time": "预计耗时"
+    }}
+  ],
+  "estimated_impact": "预计匹配度从X提升至Y，转化率提升约Z%"
 }}"""
 
     def _parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
@@ -332,6 +356,31 @@ class StrategyAdvisor(BaseAnalyzer):
             ab["recommended_sample_size"] = _AB_TEST_REQUIRED_FIELDS[
                 "recommended_sample_size"
             ]
+
+        # 校验 execution_checklist
+        if "execution_checklist" not in output or not isinstance(output["execution_checklist"], list):
+            output["execution_checklist"] = []
+        
+        # 确保每个检查项都有必需字段
+        for i, item in enumerate(output["execution_checklist"]):
+            if not isinstance(item, dict):
+                output["execution_checklist"][i] = {
+                    "step": i + 1,
+                    "action": "待定义",
+                    "detail": "",
+                    "priority": "medium",
+                    "estimated_time": "待定"
+                }
+            else:
+                item.setdefault("step", i + 1)
+                item.setdefault("action", "待定义")
+                item.setdefault("detail", "")
+                item.setdefault("priority", "medium")
+                item.setdefault("estimated_time", "待定")
+        
+        # 校验 estimated_impact
+        if "estimated_impact" not in output or not isinstance(output["estimated_impact"], str):
+            output["estimated_impact"] = "预计匹配度和转化率将有提升"
 
         return output
 

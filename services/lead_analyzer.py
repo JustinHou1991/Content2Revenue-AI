@@ -303,6 +303,93 @@ class LeadAnalyzer(BaseAnalyzer):
             "model": self.llm.model,
         }
 
+    def track_stage_transition(
+        self,
+        lead_id: str,
+        new_analysis: Dict[str, Any],
+        previous_analysis: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """追踪线索阶段变化
+        
+        当同一线索被多次分析时，自动追踪其购买阶段的变化。
+        
+        Args:
+            lead_id: 线索ID
+            new_analysis: 新的分析结果
+            previous_analysis: 上一次的分析结果（从数据库获取）
+            
+        Returns:
+            包含阶段变化追踪信息的分析结果
+        """
+        if not previous_analysis:
+            # 首次分析，无历史数据
+            return {
+                **new_analysis,
+                "stage_transition": None,
+                "is_first_analysis": True,
+            }
+        
+        # 获取购买阶段
+        stage_order = ["无意识", "认知期", "考虑期", "评估期", "决策期"]
+        
+        new_stage = new_analysis.get("profile", {}).get("buying_stage", "未知")
+        old_stage = previous_analysis.get("profile", {}).get("buying_stage", "未知")
+        
+        # 计算阶段变化
+        new_stage_idx = stage_order.index(new_stage) if new_stage in stage_order else -1
+        old_stage_idx = stage_order.index(old_stage) if old_stage in stage_order else -1
+        
+        is_advancing = new_stage_idx > old_stage_idx
+        is_regressing = new_stage_idx < old_stage_idx
+        
+        # 计算在上一阶段的时长（如果有创建时间）
+        previous_created = previous_analysis.get("created_at")
+        if previous_created:
+            try:
+                prev_time = datetime.fromisoformat(previous_created)
+                days_in_previous = (datetime.now() - prev_time).days
+            except:
+                days_in_previous = None
+        else:
+            days_in_previous = None
+        
+        # 生成建议
+        if is_advancing:
+            if new_stage == "决策期":
+                recommended_action = "线索已进入决策期，建议立即安排销售跟进，提供报价和演示"
+            elif new_stage == "评估期":
+                recommended_action = "线索正在评估方案，建议提供详细案例和对比材料"
+            elif new_stage == "考虑期":
+                recommended_action = "线索开始考虑，建议提供教育内容和成功案例"
+            else:
+                recommended_action = "线索认知加深，建议继续提供价值内容"
+        elif is_regressing:
+            recommended_action = "线索热度下降，建议重新激活或调整跟进策略"
+        else:
+            recommended_action = "线索阶段稳定，继续保持当前跟进节奏"
+        
+        # 计算意向度变化
+        old_intent = previous_analysis.get("profile", {}).get("intent_level", 5)
+        new_intent = new_analysis.get("profile", {}).get("intent_level", 5)
+        intent_change = new_intent - old_intent
+        
+        return {
+            **new_analysis,
+            "is_first_analysis": False,
+            "stage_transition": {
+                "from_stage": old_stage,
+                "to_stage": new_stage,
+                "is_advancing": is_advancing,
+                "is_regressing": is_regressing,
+                "is_stable": not is_advancing and not is_regressing,
+                "days_in_previous_stage": days_in_previous,
+                "intent_change": intent_change,
+                "previous_intent": old_intent,
+                "new_intent": new_intent,
+                "recommended_action": recommended_action,
+            },
+        }
+
     def batch_analyze(
         self,
         leads: List[Dict[str, Any]],

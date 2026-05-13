@@ -395,6 +395,38 @@ class LLMClient:
 
         raise RuntimeError(f"LLM调用失败: {str(last_error)}")
 
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.3,
+        max_tokens: Optional[int] = None,
+    ) -> Iterator[str]:
+        """
+        流式对话调用 - 返回增量文本
+
+        Args:
+            messages: OpenAI格式的消息列表
+            temperature: 温度参数
+            max_tokens: 最大输出token数
+
+        Yields:
+            增量文本片段
+
+        Note:
+            不支持缓存，每次都是实时调用
+        """
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens or self.config["max_tokens_default"],
+            stream=True,
+        )
+
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
     def chat_json(
         self,
         system_prompt: str,
