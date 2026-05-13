@@ -329,24 +329,32 @@ class LeadAnalysisPage(AnalysisPage):
         st.info(f"数据提取统计: 共 {total_rows} 行, 有效 {extracted_count} 行, 跳过 {skipped_count} 行")
         
         if skipped_count > 0:
-            st.caption("提示: 跳过的行可能是因为描述内容太短(少于3个字符)或为空")
+            st.caption("提示: 跳过的行可能是因为描述内容为空")
             
-            # 显示被跳过的数据样本
-            with st.expander("查看被跳过的数据样本"):
-                skipped_samples = []
-                for idx, row in df_normalized.iterrows():
-                    conv = str(row.get("需求描述", ""))
-                    if not conv or len(conv.strip()) < 3:
-                        skipped_samples.append({
+            # 显示被跳过的数据样本（从原始df中取样）
+            with st.expander("🔍 查看被跳过的数据样本"):
+                st.write("显示原始数据中需求描述列的前10条（用于诊断）:")
+                original_desc_col = mapping.get("需求描述", "需求描述")
+                if original_desc_col in df.columns:
+                    preview_data = []
+                    for i, (idx, row) in enumerate(df.head(10).iterrows()):
+                        desc_val = str(row.get(original_desc_col, ""))
+                        is_extracted = any(l["lead_id"] == str(idx) for l in leads)
+                        preview_data.append({
                             "行号": idx + 1,
-                            "内容": conv[:100] if conv else "(空)"
+                            "原始内容": desc_val[:80] if desc_val else "(空)",
+                            "长度": len(desc_val),
+                            "是否被提取": "✅" if is_extracted else "❌"
                         })
-                    if len(skipped_samples) >= 5:  # 最多显示5条
-                        break
-                if skipped_samples:
                     import pandas as pd
-                    st.write("前5条被跳过的数据:")
-                    st.dataframe(pd.DataFrame(skipped_samples))
+                    st.dataframe(pd.DataFrame(preview_data))
+                    
+                    # 显示被提取的线索
+                    if leads:
+                        st.write("---")
+                        st.write(f"✅ 被成功提取的 {len(leads)} 条线索:")
+                        for lead in leads:
+                            st.write(f"- 行{lead['lead_id']}: {lead['lead_data'].get('conversation', '')[:50]}...")
 
         if not leads:
             callout("未找到有效的线索数据，请检查字段映射", type="error")
