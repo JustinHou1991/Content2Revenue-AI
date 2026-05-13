@@ -219,8 +219,10 @@ class ContentAnalysisPage(AnalysisPage):
             st.session_state.content_field_mapping = None
 
     def _handle_batch_analysis(self):
-        """处理批量分析逻辑（状态机模式，逐条分析避免超时）"""
+        """处理批量分析逻辑（使用后台任务，支持页面切换不中断）"""
         from utils.field_mapping import normalize_columns
+        from services.task_manager import get_task_manager, TaskType
+        from ui.components.task_monitor import check_and_resume_task, render_task_result
 
         if st.session_state.content_field_mapping is None:
             callout("请先完成字段映射", type="error")
@@ -264,73 +266,51 @@ class ContentAnalysisPage(AnalysisPage):
 
         total = len(scripts)
 
-        # 初始化批量分析状态
-        if "batch_state" not in st.session_state or st.session_state.batch_state.get("total") != total:
-            st.session_state.batch_state = {
-                "scripts": scripts,
-                "total": total,
-                "current": 0,
-                "results": [],
-                "running": True,
-            }
-            logger.info("初始化批量分析状态，共 %d 条脚本", total)
+        # 检查是否有进行中的任务
+        current_task_id = st.session_state.get("content_analysis_task_id")
+        if current_task_id:
+            task = check_and_resume_task(current_task_id)
+            if task:
+                status = task.get("status")
+                if status in ["completed", "failed", "cancelled"]:
+                    # 任务已完成，显示结果
+                    render_task_result(task)
+                    st.session_state.content_analysis_task_id = None
+                    # 清理上传的数据
+                    st.session_state.content_df = None
+                    st.session_state.content_field_mapping = None
+                    return
+                elif status == "running":
+                    # 任务仍在运行，添加刷新按钮
+                    if st.button("🔄 刷新进度", type="primary", key="refresh_content"):
+                        st.rerun()
+                    return
 
-        state = st.session_state.batch_state
+        # 提交后台任务
+        task_manager = get_task_manager(self._get_orchestrator().db)
 
-        # 如果已经完成，直接展示结果
-        if not state["running"]:
-            self._show_batch_results(state)
-            return
+        task_data = {
+            "scripts": scripts,
+            "total": total,
+        }
 
-        # 显示进度
-        current = state["current"]
-        progress_bar = st.progress(current / total, text=f"正在分析第 {current + 1}/{total} 条...")
+        task_id = task_manager.submit_task(
+            task_type=TaskType.CONTENT_ANALYSIS,
+            task_data=task_data,
+        )
 
-        # 取消按钮
-        if st.button("取消分析", type="secondary"):
-            state["running"] = False
-            callout(f"分析已取消，已完成 {current}/{total} 条", type="warning")
-            progress_bar.empty()
-            self._show_batch_results(state)
-            return
+        st.session_state.content_analysis_task_id = task_id
 
-        # 分析当前脚本
-        if current < total:
-            script = state["scripts"][current]
-            try:
-                logger.info("正在分析第 %d/%d 条脚本 (script_id=%s)", current + 1, total, script.get("script_id"))
+        st.success(f"✅ 任务已提交到后台执行！")
+        st.info(f"📋 任务ID: {task_id[:8]}...")
+        st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。返回此页面可查看进度。")
 
-                single_result = self._get_orchestrator().content_analyzer.analyze(
-                    script_text=script["script_text"],
-                    script_id=script["script_id"],
-                )
+        # 显示初始进度
+        st.progress(0, text=f"准备分析 {total} 条脚本...")
 
-                logger.info("第 %d 条脚本分析完成，content_id=%s", current + 1, single_result.get("content_id"))
-
-                # 保存到数据库
-                self._get_orchestrator().db.save_content_analysis(single_result)
-                state["results"].append({
-                    "success": True,
-                    "index": current,
-                    "data": single_result,
-                })
-            except Exception as e:
-                logger.error("第 %d 条脚本分析失败: %s", current + 1, e)
-                state["results"].append({
-                    "success": False,
-                    "index": current,
-                    "error": str(e),
-                })
-
-            # 更新进度并触发下一次分析
-            state["current"] = current + 1
-            if state["current"] >= total:
-                state["running"] = False
+        # 添加刷新按钮
+        if st.button("🔄 刷新进度", type="primary", key="refresh_content"):
             st.rerun()
-
-        # 完成
-        progress_bar.empty()
-        self._show_batch_results(state)
 
     def _show_batch_results(self, state: dict):
         """展示批量分析结果"""
