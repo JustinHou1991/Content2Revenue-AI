@@ -307,24 +307,33 @@ class MatchEngine(BaseAnalyzer):
             logger.warning("线索列表为空，跳过批量匹配")
             return []
 
-        # ---- 过滤无效线索（无等级或等级为?的）----
+        # ---- 过滤无效线索（关键字段缺失或为空）----
         valid_leads = []
         skipped_leads = 0
         for lead in leads:
             lead_profile = lead.get("profile", lead)
-            lead_grade = lead_profile.get("lead_grade", "?")
-            if lead_grade and lead_grade != "?":
+            # 检查关键字段：行业、公司阶段、决策角色、购买阶段
+            key_fields = ["industry", "company_stage", "role", "buying_stage"]
+            has_valid_data = False
+            for field in key_fields:
+                value = lead_profile.get(field, "")
+                if value and value != "未知" and str(value).strip():
+                    has_valid_data = True
+                    break
+
+            if has_valid_data:
                 valid_leads.append(lead)
             else:
                 skipped_leads += 1
-                logger.debug("跳过无效线索: lead_id=%s, grade=%s", lead.get("lead_id"), lead_grade)
+                lead_id = lead.get("lead_id", "unknown")
+                logger.debug("跳过无效线索: lead_id=%s, profile=%s", lead_id, lead_profile)
 
         if skipped_leads > 0:
-            logger.warning("过滤掉 %d 条无效线索（无等级或等级为?），剩余 %d 条有效线索", skipped_leads, len(valid_leads))
+            logger.warning("过滤掉 %d 条无效线索（关键字段缺失），剩余 %d 条有效线索", skipped_leads, len(valid_leads))
 
         leads = valid_leads
         if not leads:
-            logger.warning("没有有效的线索可供匹配（所有线索都缺少等级信息）")
+            logger.warning("没有有效的线索可供匹配（所有线索的关键字段都为空）")
             return []
 
         # ---- 构建所有待匹配任务（带原始索引，保证结果顺序） ----
