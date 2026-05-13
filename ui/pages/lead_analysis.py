@@ -228,13 +228,13 @@ class LeadAnalysisPage(AnalysisPage):
         for idx, row in df_normalized.iterrows():
             lead_data = {}
 
-            # 优先使用需求描述字段
+            # 优先使用需求描述字段（放宽长度限制，只要有内容即可）
             if "需求描述" in mapping:
                 conversation = str(row.get("需求描述", ""))
                 if (conversation
                         and conversation.strip()
                         and conversation.lower() not in ["nan", "none", ""]
-                        and len(conversation.strip()) >= 10):
+                        and len(conversation.strip()) >= 3):  # 放宽到3个字符
                     lead_data["conversation"] = conversation.strip()
 
             # 添加其他字段
@@ -262,6 +262,16 @@ class LeadAnalysisPage(AnalysisPage):
                     "lead_data": lead_data,
                     "lead_id": str(idx),
                 })
+
+        # 显示提取统计
+        total_rows = len(df_normalized)
+        extracted_count = len(leads)
+        skipped_count = total_rows - extracted_count
+        
+        st.info(f"数据提取统计: 共 {total_rows} 行, 有效 {extracted_count} 行, 跳过 {skipped_count} 行")
+        
+        if skipped_count > 0:
+            st.caption("提示: 跳过的行可能是因为描述内容太短(少于3个字符)或为空")
 
         if not leads:
             callout("未找到有效的线索数据，请检查字段映射", type="error")
