@@ -228,13 +228,10 @@ class LeadAnalysisPage(AnalysisPage):
         for idx, row in df_normalized.iterrows():
             lead_data = {}
 
-            # 优先使用需求描述字段（放宽长度限制，只要有内容即可）
+            # 优先使用需求描述字段（只要有任何内容即可）
             if "需求描述" in mapping:
                 conversation = str(row.get("需求描述", ""))
-                if (conversation
-                        and conversation.strip()
-                        and conversation.lower() not in ["nan", "none", ""]
-                        and len(conversation.strip()) >= 3):  # 放宽到3个字符
+                if conversation and conversation.strip() and conversation.lower() not in ["nan", "none", ""]:
                     lead_data["conversation"] = conversation.strip()
 
             # 添加其他字段
@@ -272,6 +269,23 @@ class LeadAnalysisPage(AnalysisPage):
         
         if skipped_count > 0:
             st.caption("提示: 跳过的行可能是因为描述内容太短(少于3个字符)或为空")
+            
+            # 显示被跳过的数据样本
+            with st.expander("查看被跳过的数据样本"):
+                skipped_samples = []
+                for idx, row in df_normalized.iterrows():
+                    conv = str(row.get("需求描述", ""))
+                    if not conv or len(conv.strip()) < 3:
+                        skipped_samples.append({
+                            "行号": idx + 1,
+                            "内容": conv[:100] if conv else "(空)"
+                        })
+                    if len(skipped_samples) >= 5:  # 最多显示5条
+                        break
+                if skipped_samples:
+                    import pandas as pd
+                    st.write("前5条被跳过的数据:")
+                    st.dataframe(pd.DataFrame(skipped_samples))
 
         if not leads:
             callout("未找到有效的线索数据，请检查字段映射", type="error")
