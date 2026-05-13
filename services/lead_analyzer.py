@@ -141,40 +141,47 @@ class LeadAnalyzer(BaseAnalyzer):
         # 将用户输入用标签包裹，减少 Prompt 注入风险；截断超长输入
         lead_text_wrapped = self._wrap_user_content(lead_text, max_length=5000)
 
-        return f"""请分析以下销售线索，重点关注：需求、痛点、满意程度、是否提供了有效线索。
+        return f"""请分析以下销售线索，评估其质量和跟进优先级。
 
 【线索信息】
 {lead_text_wrapped}
 
-【分析重点】
-1. 需求：客户明确表达的需求是什么？
-2. 痛点：客户面临的核心痛点有哪些？
-3. 满意程度：客户对现状/产品的满意度（1-10分，10分非常满意）
-4. 有效线索：是否提供了联系方式或明确的合作意向？
+【分析说明】
+- 如果线索信息很少（如只留了电话/微信），请根据有限信息判断：
+  * 是否提供了有效联系方式（电话/微信/邮箱等）
+  * 是否有购买意向（主动咨询、留下联系方式本身就是一种意向信号）
+  * 线索质量评估：有联系方式 > 无联系方式
+- 如果线索信息丰富，请深入分析需求、痛点、行业等
+
+【评估维度】
+1. 是否有联系方式：电话、微信、邮箱等
+2. 是否有明确需求或意向信号
+3. 信息完整度：线索提供了多少有效信息
+4. 跟进优先级：高（有联系方式+有需求）、中（有联系方式）、低（无联系方式）
 
 【输出格式要求】
 请严格按照以下JSON格式输出：
 {{
-  "requirement": "客户明确表达的需求",
-  "pain_points": ["痛点1", "痛点2", "痛点3"],
-  "satisfaction_level": "满意程度 1-10的数字",
   "has_contact_info": "是否提供了有效联系方式（是/否）",
-  "is_valid_lead": "是否为有效线索（是/否）",
-  "lead_quality": "线索质量（高/中/低）",
-  "industry": "所属行业",
-  "company_stage": "公司发展阶段（初创/成长期/成熟期/转型期）",
-  "role": "决策角色（决策者/影响者/使用者/信息收集者）",
-  "intent_level": "购买意向度 0-10的数字",
-  "intent_signals": ["意向信号1", "意向信号2"],
-  "buying_stage": "购买阶段（无意识/认知期/考虑期/评估期/决策期）",
+  "contact_type": "联系方式类型（电话/微信/邮箱/无）",
+  "is_valid_lead": "是否为有效线索（是/否）- 有联系方式即为有效",
+  "lead_quality": "线索质量（高/中/低）- 高:有联系方式+有需求; 中:有联系方式; 低:无联系方式",
+  "follow_up_priority": "跟进优先级（高/中/低）",
+  "requirement": "客户明确表达的需求（如未明确则填'未详细说明'）",
+  "pain_points": ["痛点1", "痛点2"],
+  "satisfaction_level": "满意程度 1-10的数字（无信息则填5）",
+  "intent_level": "购买意向度 0-10的数字（留联系方式=至少5分）",
+  "intent_signals": ["意向信号1"],
+  "industry": "所属行业（如无法判断则填'未知'）",
+  "company_stage": "公司发展阶段（如无法判断则填'未知'）",
+  "role": "决策角色（如无法判断则填'未知'）",
+  "buying_stage": "购买阶段（如无法判断则填'未知'）",
   "urgency": "紧迫程度（低/中/高/紧急）",
-  "budget_readiness": "预算准备情况描述",
-  "decision_criteria": ["决策标准1", "决策标准2"],
-  "objection_risks": ["异议风险1", "异议风险2"],
+  "budget_readiness": "预算准备情况（如无法判断则填'未知'）",
   "recommended_content_type": "适合的内容类型",
   "recommended_cta": "适合的CTA类型",
   "engagement_strategy": "建议的互动策略（1-2句话）",
-  "lead_score": "线索质量评分 0-100的数字"
+  "lead_score": "线索质量评分 0-100的数字（有联系方式=至少40分）"
 }}"""
 
     def _parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
@@ -202,22 +209,22 @@ class LeadAnalyzer(BaseAnalyzer):
 
         # 必需字段及其默认值
         required_fields: Dict[str, Any] = {
-            "requirement": "未明确表达",
-            "pain_points": [],
-            "satisfaction_level": 5,
             "has_contact_info": "否",
+            "contact_type": "无",
             "is_valid_lead": "否",
             "lead_quality": "低",
+            "follow_up_priority": "低",
+            "requirement": "未详细说明",
+            "pain_points": [],
+            "satisfaction_level": 5,
+            "intent_level": 5,
+            "intent_signals": [],
             "industry": "未知",
             "company_stage": "未知",
             "role": "未知",
-            "intent_level": 5,
-            "intent_signals": [],
             "buying_stage": "未知",
             "urgency": "未知",
             "budget_readiness": "未知",
-            "decision_criteria": [],
-            "objection_risks": [],
             "recommended_content_type": "未知",
             "recommended_cta": "未知",
             "engagement_strategy": "",

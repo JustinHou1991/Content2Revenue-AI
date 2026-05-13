@@ -222,6 +222,42 @@ class LeadAnalysisPage(AnalysisPage):
         # 标准化列名
         df_normalized = normalize_columns(df, {k: v for k, v in mapping.items()})
 
+        # ---- 数据清洗步骤 ----
+        st.subheader("数据清洗")
+        
+        # 1. 删除完全为空的行
+        df_before = len(df_normalized)
+        df_normalized = df_normalized.dropna(how='all')
+        empty_rows = df_before - len(df_normalized)
+        
+        # 2. 清理需求描述列（去除前后空格、特殊字符）
+        if "需求描述" in mapping:
+            desc_col = mapping["需求描述"]
+            # 转换为字符串并清理
+            df_normalized[desc_col] = df_normalized[desc_col].astype(str).str.strip()
+            # 替换常见的空值表示
+            df_normalized[desc_col] = df_normalized[desc_col].replace(
+                ['nan', 'None', 'null', 'NULL', '-', '--', '无', ''], 
+                ''
+            )
+            # 删除清理后为空的行
+            df_before = len(df_normalized)
+            df_normalized = df_normalized[df_normalized[desc_col] != '']
+            cleaned_rows = df_before - len(df_normalized)
+        else:
+            cleaned_rows = 0
+        
+        # 显示清洗结果
+        total_cleaned = empty_rows + cleaned_rows
+        if total_cleaned > 0:
+            st.success(f"✅ 数据清洗完成：删除 {empty_rows} 行空数据，清理 {cleaned_rows} 行无效数据，剩余 {len(df_normalized)} 行")
+        else:
+            st.info(f"数据清洗完成：共 {len(df_normalized)} 行数据，无需清洗")
+        
+        # 显示清洗后的数据预览
+        with st.expander("查看清洗后的数据"):
+            st.dataframe(df_normalized.head(10))
+        
         # 准备线索数据（过滤空值、短文本、重复内容）
         leads = []
         seen_texts = set()
@@ -512,27 +548,33 @@ class LeadAnalysisPage(AnalysisPage):
         col_left, col_right = st.columns(2)
 
         with col_left:
-            st.markdown("**核心信息**")
-            # 需求
-            req = profile.get('requirement', '未明确表达')
-            st.write(f"**需求**: {req}")
-            # 满意程度
-            sat = profile.get('satisfaction_level', 5)
-            st.write(f"**满意程度**: {sat}/10")
-            # 是否有效线索
-            is_valid = profile.get('is_valid_lead', '否')
+            st.markdown("**📋 线索评估**")
+            # 联系方式
             has_contact = profile.get('has_contact_info', '否')
+            contact_type = profile.get('contact_type', '无')
+            st.write(f"**联系方式**: {contact_type} ({has_contact})")
+            # 线索质量与优先级
             quality = profile.get('lead_quality', '低')
-            st.write(f"**线索质量**: {quality} | 有效: {is_valid} | 有联系方式: {has_contact}")
+            priority = profile.get('follow_up_priority', '低')
+            is_valid = profile.get('is_valid_lead', '否')
+            st.write(f"**质量/优先级**: {quality} / {priority} | 有效: {is_valid}")
+            # 需求
+            req = profile.get('requirement', '未详细说明')
+            st.write(f"**需求**: {req}")
 
         with col_right:
-            st.markdown("**核心痛点**")
+            st.markdown("**🎯 意向评估**")
+            # 意向度
+            intent = profile.get('intent_level', 5)
+            sat = profile.get('satisfaction_level', 5)
+            st.write(f"**意向度/满意度**: {intent}/10 / {sat}/10")
+            # 核心痛点
             pains = profile.get("pain_points", [])
             if pains:
-                for pain in pains[:3]:  # 最多显示3个
+                for pain in pains[:2]:  # 最多显示2个
                     st.write(f"- {pain}")
             else:
-                st.write("暂无")
+                st.write("暂无痛点信息")
 
     def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":
         """解析 PDF 文件，提取文本内容"""
