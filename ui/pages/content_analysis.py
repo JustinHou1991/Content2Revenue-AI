@@ -207,7 +207,7 @@ class ContentAnalysisPage(AnalysisPage):
             st.session_state.content_field_mapping = None
 
     def _handle_batch_analysis(self):
-        """处理批量分析逻辑"""
+        """处理批量分析逻辑（状态机模式，逐条分析避免超时）"""
         from utils.field_mapping import normalize_columns
 
         if st.session_state.content_field_mapping is None:
@@ -239,119 +239,115 @@ class ContentAnalysisPage(AnalysisPage):
             callout("未找到有效的脚本内容，请检查字段映射", type="error")
             return
 
-        # 创建取消事件
-        cancel_event = threading.Event()
+        total = len(scripts)
 
-        # 显示进度和取消按钮
-        progress_container = st.container()
-        with progress_container:
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                progress_bar = st.progress(0, text="准备开始批量分析...")
-            with col2:
-                cancel_btn = st.button(
-                    "取消分析", type="secondary", use_container_width=True
-                )
+        # 初始化批量分析状态
+        if "batch_state" not in st.session_state or st.session_state.batch_state.get("total") != total:
+            st.session_state.batch_state = {
+                "scripts": scripts,
+                "total": total,
+                "current": 0,
+                "results": [],
+                "running": True,
+            }
+            logger.info("初始化批量分析状态，共 %d 条脚本", total)
 
-        if cancel_btn:
-            cancel_event.set()
-            callout("已取消分析", type="warning")
+        state = st.session_state.batch_state
+
+        # 如果已经完成，直接展示结果
+        if not state["running"]:
+            self._show_batch_results(state)
             return
 
-        # 执行批量分析
-        results = []
-        total = len(scripts)
-        logger.info("开始批量分析，共 %d 条脚本", total)
+        # 显示进度
+        current = state["current"]
+        progress_bar = st.progress(current / total, text=f"正在分析第 {current + 1}/{total} 条...")
 
-        try:
-            for i, script in enumerate(scripts):
-                # 检查取消事件
-                if cancel_event.is_set():
-                    callout(f"分析已取消，已完成 {i}/{total} 条", type="warning")
-                    break
-
-                try:
-                    logger.info("正在分析第 %d/%d 条脚本 (script_id=%s)", i + 1, total, script.get("script_id"))
-
-                    # 传入唯一的 script_id 确保每条结果独立保存
-                    single_result = self._get_orchestrator().content_analyzer.analyze(
-                        script_text=script["script_text"],
-                        script_id=script["script_id"],
-                    )
-
-                    logger.info("第 %d 条脚本分析完成，content_id=%s", i + 1, single_result.get("content_id"))
-
-                    # 保存到数据库
-                    self._get_orchestrator().db.save_content_analysis(single_result)
-                    results.append({
-                        "success": True,
-                        "index": i,
-                        "data": single_result,
-                    })
-                except Exception as e:
-                    logger.error("第 %d 条脚本分析失败: %s", i + 1, e)
-                    results.append({
-                        "success": False,
-                        "index": i,
-                        "error": str(e),
-                    })
-
-                # 更新进度
-                progress_bar.progress(
-                    (i + 1) / len(scripts),
-                    text=f"正在分析... ({i + 1}/{len(scripts)})",
-                )
-
-                # 检查取消按钮是否被点击
-                if st.session_state.get("cancel_batch_analysis"):
-                    break
-
+        # 取消按钮
+        if st.button("取消分析", type="secondary"):
+            state["running"] = False
+            callout(f"分析已取消，已完成 {current}/{total} 条", type="warning")
             progress_bar.empty()
+            self._show_batch_results(state)
+            return
 
-            # 显示结果统计
-            success_count = sum(1 for r in results if r.get("success"))
-            fail_count = sum(1 for r in results if not r.get("success"))
-            processed_count = len(results)
-
-            # 验证数据库实际保存数量
+        # 分析当前脚本
+        if current < total:
+            script = state["scripts"][current]
             try:
-                db_count = len(self._get_orchestrator().db.get_all_content_analyses())
-            except Exception:
-                db_count = -1
+                logger.info("正在分析第 %d/%d 条脚本 (script_id=%s)", current + 1, total, script.get("script_id"))
 
-            if cancel_event.is_set() or st.session_state.get("cancel_batch_analysis"):
-                callout(
-                    f"批量分析已取消！成功 {success_count}/{processed_count} 条（共 {total} 条）",
-                    type="warning",
+                single_result = self._get_orchestrator().content_analyzer.analyze(
+                    script_text=script["script_text"],
+                    script_id=script["script_id"],
                 )
+
+                logger.info("第 %d 条脚本分析完成，content_id=%s", current + 1, single_result.get("content_id"))
+
+                # 保存到数据库
+                self._get_orchestrator().db.save_content_analysis(single_result)
+                state["results"].append({
+                    "success": True,
+                    "index": current,
+                    "data": single_result,
+                })
+            except Exception as e:
+                logger.error("第 %d 条脚本分析失败: %s", current + 1, e)
+                state["results"].append({
+                    "success": False,
+                    "index": current,
+                    "error": str(e),
+                })
+
+            # 更新进度并触发下一次分析
+            state["current"] = current + 1
+            if state["current"] >= total:
+                state["running"] = False
+            st.rerun()
+
+        # 完成
+        progress_bar.empty()
+        self._show_batch_results(state)
+
+    def _show_batch_results(self, state: dict):
+        """展示批量分析结果"""
+        results = state["results"]
+        total = state["total"]
+        success_count = sum(1 for r in results if r.get("success"))
+        fail_count = sum(1 for r in results if not r.get("success"))
+
+        # 验证数据库实际保存数量
+        try:
+            db_count = len(self._get_orchestrator().db.get_all_content_analyses())
+        except Exception:
+            db_count = -1
+
+        msg = f"批量分析完成！成功 {success_count}/{total} 条"
+        if fail_count > 0:
+            msg += f"（{fail_count} 条失败）"
+        if db_count >= 0:
+            msg += f" | 数据库共 {db_count} 条记录"
+        callout(msg, type="success", icon="&#10003;")
+
+        # 展示结果
+        divider()
+        st.subheader("分析结果")
+
+        for r in results:
+            if r.get("success"):
+                with st.expander(
+                    f"脚本 #{r['index']+1} - 评分 {r['data']['analysis'].get('content_score', 'N/A')}/10"
+                ):
+                    self._display_analysis(r["data"]["analysis"])
             else:
-                msg = f"批量分析完成！成功 {success_count}/{total} 条"
-                if fail_count > 0:
-                    msg += f"（{fail_count} 条失败）"
-                if db_count >= 0:
-                    msg += f" | 数据库共 {db_count} 条记录"
-                callout(msg, type="success", icon="&#10003;")
-
-            # 展示结果
-            divider()
-            st.subheader("分析结果")
-
-            for r in results:
-                if r.get("success"):
-                    with st.expander(
-                        f"脚本 #{r['index']+1} - 评分 {r['data']['analysis'].get('content_score', 'N/A')}/10"
-                    ):
-                        self._display_analysis(r["data"]["analysis"])
-                else:
-                    with st.expander(f"脚本 #{r['index']+1} - 分析失败"):
-                        st.error(r.get("error", "未知错误"))
-
-        except Exception as e:
-            callout(f"批量分析失败: {str(e)}", type="error")
+                with st.expander(f"脚本 #{r['index']+1} - 分析失败"):
+                    st.error(r.get("error", "未知错误"))
 
         # 清理状态
         st.session_state.content_df = None
         st.session_state.content_field_mapping = None
+        if "batch_state" in st.session_state:
+            del st.session_state.batch_state
 
     def _display_result(self, result: dict):
         """展示单个分析结果"""
