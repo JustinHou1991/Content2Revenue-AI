@@ -231,18 +231,18 @@ class LeadAnalysisPage(AnalysisPage):
         empty_rows = df_before - len(df_normalized)
         
         # 2. 清理需求描述列（去除前后空格、特殊字符）
-        if "需求描述" in mapping:
-            desc_col = mapping["需求描述"]
+        # normalize_columns 后，列名已经是标准字段名
+        if "需求描述" in df_normalized.columns:
             # 转换为字符串并清理
-            df_normalized[desc_col] = df_normalized[desc_col].astype(str).str.strip()
+            df_normalized["需求描述"] = df_normalized["需求描述"].astype(str).str.strip()
             # 替换常见的空值表示
-            df_normalized[desc_col] = df_normalized[desc_col].replace(
+            df_normalized["需求描述"] = df_normalized["需求描述"].replace(
                 ['nan', 'None', 'null', 'NULL', '-', '--', '无', ''], 
                 ''
             )
             # 删除清理后为空的行
             df_before = len(df_normalized)
-            df_normalized = df_normalized[df_normalized[desc_col] != '']
+            df_normalized = df_normalized[df_normalized["需求描述"] != '']
             cleaned_rows = df_before - len(df_normalized)
         else:
             cleaned_rows = 0
