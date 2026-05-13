@@ -10,13 +10,13 @@ logger = logging.getLogger(__name__)
 class InputValidator:
     """输入验证器"""
 
-    # 危险模式
+    # 危险模式（仅保留XSS相关，移除SQL关键字检查）
+    # 注意：SQLite使用参数化查询，本身就防SQL注入
+    # SQL关键字检查会误伤正常中文输入如"选择一个方案"、"删除旧数据"
     DANGEROUS_PATTERNS = [
         r'<script[^>]*>.*?</script>',  # XSS
         r'javascript:',  # JS 协议
         r'on\w+\s*=',  # 事件处理器
-        r'\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION)\b',  # SQL 关键字
-        r'\b(ALTER|CREATE|EXEC|EXECUTE|TRUNCATE)\b',
     ]
 
     # 最大长度限制
