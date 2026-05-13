@@ -206,6 +206,7 @@ class LeadAnalysisPage(AnalysisPage):
     def _handle_batch_analysis(self):
         """处理批量分析逻辑"""
         from utils.field_mapping import normalize_columns
+        import pandas as pd
 
         if st.session_state.lead_field_mapping is None:
             callout("请先完成字段映射", type="error")
