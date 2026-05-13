@@ -307,6 +307,26 @@ class MatchEngine(BaseAnalyzer):
             logger.warning("线索列表为空，跳过批量匹配")
             return []
 
+        # ---- 过滤无效线索（无等级或等级为?的）----
+        valid_leads = []
+        skipped_leads = 0
+        for lead in leads:
+            lead_profile = lead.get("profile", lead)
+            lead_grade = lead_profile.get("lead_grade", "?")
+            if lead_grade and lead_grade != "?":
+                valid_leads.append(lead)
+            else:
+                skipped_leads += 1
+                logger.debug("跳过无效线索: lead_id=%s, grade=%s", lead.get("lead_id"), lead_grade)
+
+        if skipped_leads > 0:
+            logger.warning("过滤掉 %d 条无效线索（无等级或等级为?），剩余 %d 条有效线索", skipped_leads, len(valid_leads))
+
+        leads = valid_leads
+        if not leads:
+            logger.warning("没有有效的线索可供匹配（所有线索都缺少等级信息）")
+            return []
+
         # ---- 构建所有待匹配任务（带原始索引，保证结果顺序） ----
         tasks: List[tuple] = []
         for lead_idx, lead in enumerate(leads):
@@ -447,15 +467,24 @@ class MatchEngine(BaseAnalyzer):
                 reverse=True,
             )
             # 只取前 top_k 个成功匹配，失败项不计入
+            # 构建完整的线索快照（包含所有关键字段）
+            raw_data = lead.get("raw_data", {})
             lead_result: Dict[str, Any] = {
                 "lead_id": lead_id or "unknown",
                 "lead_snapshot": {
-                    "industry": lead_profile.get("industry"),
-                    "company": lead.get("raw_data", {}).get("company", ""),
+                    "lead_id": lead_id,
+                    "industry": lead_profile.get("industry", "未知"),
+                    "company": raw_data.get("company") or raw_data.get("公司名称") or "未知",
+                    "name": raw_data.get("name") or raw_data.get("联系人") or "",
+                    "lead_grade": lead_profile.get("lead_grade", "?"),
+                    "lead_score": lead_profile.get("lead_score", 0),
+                    "intent_level": lead_profile.get("intent_level", 0),
+                    "buying_stage": lead_profile.get("buying_stage", "未知"),
+                    "pain_points": lead_profile.get("pain_points", [])[:3],
                 },
                 "top_matches": successful[:top_k],
                 "total_content_scored": len(contents),
-                "failed_count": len(failed),  # 记录失败数量供诊断
+                "failed_count": len(failed),
             }
             results.append(lead_result)
 
