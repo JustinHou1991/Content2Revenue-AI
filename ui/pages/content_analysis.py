@@ -237,15 +237,26 @@ class ContentAnalysisPage(AnalysisPage):
         # 标准化列名
         df_normalized = normalize_columns(df, {k: v for k, v in mapping.items()})
 
-        # 准备脚本数据
+        # 准备脚本数据（过滤空值、短文本、重复内容）
         scripts = []
+        seen_texts = set()
         for idx, row in df_normalized.iterrows():
             script_text = str(row.get("脚本内容", ""))
-            if script_text and script_text.strip() and script_text.lower() != "nan":
-                scripts.append({
-                    "script_text": script_text,
-                    "script_id": str(idx),
-                })
+            # 过滤无效内容
+            if (not script_text
+                    or not script_text.strip()
+                    or script_text.lower() in ["nan", "none", ""]
+                    or len(script_text.strip()) < 10):
+                continue
+            # 过滤重复内容
+            text_key = script_text.strip()[:50]
+            if text_key in seen_texts:
+                continue
+            seen_texts.add(text_key)
+            scripts.append({
+                "script_text": script_text.strip(),
+                "script_id": str(idx),
+            })
 
         if not scripts:
             callout("未找到有效的脚本内容，请检查字段映射", type="error")
@@ -387,16 +398,19 @@ class ContentAnalysisPage(AnalysisPage):
                                 cleaned_row = [
                                     (cell or "").strip() for cell in row
                                 ]
-                                if any(cleaned_row):
+                                # 跳过全空行
+                                if any(cell for cell in cleaned_row):
                                     cleaned.append(cleaned_row)
                             if cleaned:
                                 all_tables.extend(cleaned)
 
                     if all_tables and len(all_tables) > 1:
                         # 有表格数据，第一行作为表头
-                        df = pd.DataFrame(all_tables[1:], columns=all_tables[0])
-                        # 过滤掉全空行
+                        headers = all_tables[0]
+                        df = pd.DataFrame(all_tables[1:], columns=headers)
+                        # 过滤掉全空行和无效行
                         df = df.dropna(how="all")
+                        df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
                         st.success(f"✅ 成功从 PDF 表格提取 {len(df)} 条记录")
                         return df
 
@@ -446,9 +460,9 @@ class ContentAnalysisPage(AnalysisPage):
     def _parse_word(self, uploaded_file) -> "pd.DataFrame":
         """解析 Word 文件，提取文本内容
 
-        支持两种模式：
-        1. 每个 Word 段落作为一条脚本（如果段落较长）
-        2. 如果文档包含表格，尝试提取为结构化数据
+        智能识别模式：
+        1. 如果文档包含表格，提取表格数据（每行一条记录）
+        2. 如果没有表格，按段落提取（合并连续短段落）
         """
         import pandas as pd
         from docx import Document
@@ -461,32 +475,59 @@ class ContentAnalysisPage(AnalysisPage):
             tables_data = []
             for table in doc.tables:
                 for row in table.rows:
-                    row_data = [cell.text.strip() for cell in row.cells]
-                    if any(row_data):  # 跳过空行
+                    # 去重合并单元格（python-docx 对合并单元格会重复返回）
+                    seen_texts = set()
+                    row_data = []
+                    for cell in row.cells:
+                        text = cell.text.strip()
+                        if text and text not in seen_texts:
+                            seen_texts.add(text)
+                            row_data.append(text)
+                    if any(row_data):
                         tables_data.append(row_data)
 
             if tables_data and len(tables_data) > 1:
                 # 有表格数据，第一行作为表头
-                df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
+                headers = tables_data[0]
+                df = pd.DataFrame(tables_data[1:], columns=headers)
+                # 过滤掉全空行
+                df = df.dropna(how="all")
+                # 过滤掉所有列都为空的行
+                df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
                 st.success(f"✅ 成功从 Word 表格提取 {len(df)} 条记录")
                 return df
 
-            # 没有表格，提取段落文本
+            # 没有表格，提取段落文本（智能合并连续短段落）
             paragraphs = []
+            buffer = ""
+
             for i, para in enumerate(doc.paragraphs):
                 text = para.text.strip()
-                # 只保留较长的段落（可能是脚本内容）
-                if text and len(text) > 20:
-                    paragraphs.append({
-                        "脚本内容": text,
-                        "段落": i + 1,
-                    })
+                if not text:
+                    # 空段落：如果 buffer 有内容，保存
+                    if buffer and len(buffer) > 20:
+                        paragraphs.append(buffer.strip())
+                    buffer = ""
+                    continue
+
+                # 如果当前段落很短且 buffer 也不长，合并
+                if len(text) < 30 and len(buffer) < 200:
+                    buffer += text
+                else:
+                    # 保存 buffer
+                    if buffer and len(buffer) > 20:
+                        paragraphs.append(buffer.strip())
+                    buffer = text
+
+            # 保存最后一个 buffer
+            if buffer and len(buffer) > 20:
+                paragraphs.append(buffer.strip())
 
             if not paragraphs:
                 st.warning("Word 文档未提取到有效文本内容")
                 return pd.DataFrame()
 
-            df = pd.DataFrame(paragraphs)
+            df = pd.DataFrame({"脚本内容": paragraphs})
             st.success(f"✅ 成功从 Word 提取 {len(df)} 个段落")
             return df
 

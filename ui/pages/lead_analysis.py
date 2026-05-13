@@ -222,16 +222,20 @@ class LeadAnalysisPage(AnalysisPage):
         # 标准化列名
         df_normalized = normalize_columns(df, {k: v for k, v in mapping.items()})
 
-        # 准备线索数据
+        # 准备线索数据（过滤空值、短文本、重复内容）
         leads = []
+        seen_texts = set()
         for idx, row in df_normalized.iterrows():
             lead_data = {}
 
             # 优先使用需求描述字段
             if "需求描述" in mapping:
                 conversation = str(row.get("需求描述", ""))
-                if conversation and conversation.strip() and conversation.lower() != "nan":
-                    lead_data["conversation"] = conversation
+                if (conversation
+                        and conversation.strip()
+                        and conversation.lower() not in ["nan", "none", ""]
+                        and len(conversation.strip()) >= 10):
+                    lead_data["conversation"] = conversation.strip()
 
             # 添加其他字段
             for standard_field, original_col in mapping.items():
@@ -248,7 +252,12 @@ class LeadAnalysisPage(AnalysisPage):
                         key = field_key_map.get(standard_field, standard_field)
                         lead_data[key] = str(value)
 
-            if lead_data:
+            if lead_data and lead_data.get("conversation"):
+                # 过滤重复内容
+                conv_key = lead_data["conversation"][:50]
+                if conv_key in seen_texts:
+                    continue
+                seen_texts.add(conv_key)
                 leads.append({
                     "lead_data": lead_data,
                     "lead_id": str(idx),
@@ -511,14 +520,16 @@ class LeadAnalysisPage(AnalysisPage):
                                 cleaned_row = [
                                     (cell or "").strip() for cell in row
                                 ]
-                                if any(cleaned_row):
+                                if any(cell for cell in cleaned_row):
                                     cleaned.append(cleaned_row)
                             if cleaned:
                                 all_tables.extend(cleaned)
 
                     if all_tables and len(all_tables) > 1:
-                        df = pd.DataFrame(all_tables[1:], columns=all_tables[0])
+                        headers = all_tables[0]
+                        df = pd.DataFrame(all_tables[1:], columns=headers)
                         df = df.dropna(how="all")
+                        df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
                         st.success(f"✅ 成功从 PDF 表格提取 {len(df)} 条记录")
                         return df
 
@@ -572,34 +583,55 @@ class LeadAnalysisPage(AnalysisPage):
         try:
             doc = Document(uploaded_file)
 
-            # 先尝试提取表格
+            # 先尝试提取表格（去重合并单元格）
             tables_data = []
             for table in doc.tables:
                 for row in table.rows:
-                    row_data = [cell.text.strip() for cell in row.cells]
+                    seen_texts = set()
+                    row_data = []
+                    for cell in row.cells:
+                        text = cell.text.strip()
+                        if text and text not in seen_texts:
+                            seen_texts.add(text)
+                            row_data.append(text)
                     if any(row_data):
                         tables_data.append(row_data)
 
             if tables_data and len(tables_data) > 1:
-                df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
+                headers = tables_data[0]
+                df = pd.DataFrame(tables_data[1:], columns=headers)
+                df = df.dropna(how="all")
+                df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
                 st.success(f"✅ 成功从 Word 表格提取 {len(df)} 条记录")
                 return df
 
-            # 没有表格，提取段落文本
+            # 没有表格，智能合并段落
             paragraphs = []
+            buffer = ""
+
             for i, para in enumerate(doc.paragraphs):
                 text = para.text.strip()
-                if text and len(text) > 20:
-                    paragraphs.append({
-                        "需求描述": text,
-                        "段落": i + 1,
-                    })
+                if not text:
+                    if buffer and len(buffer) > 20:
+                        paragraphs.append(buffer.strip())
+                    buffer = ""
+                    continue
+
+                if len(text) < 30 and len(buffer) < 200:
+                    buffer += text
+                else:
+                    if buffer and len(buffer) > 20:
+                        paragraphs.append(buffer.strip())
+                    buffer = text
+
+            if buffer and len(buffer) > 20:
+                paragraphs.append(buffer.strip())
 
             if not paragraphs:
                 st.warning("Word 文档未提取到有效文本内容")
                 return pd.DataFrame()
 
-            df = pd.DataFrame(paragraphs)
+            df = pd.DataFrame({"需求描述": paragraphs})
             st.success(f"✅ 成功从 Word 提取 {len(df)} 个段落")
             return df
 
