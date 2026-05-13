@@ -488,17 +488,26 @@ class LeadAnalysisPage(AnalysisPage):
         col_left, col_right = st.columns(2)
 
         with col_left:
-            st.markdown("**基础画像**")
-            st.write(f"行业: {profile.get('industry', '未知')}")
-            st.write(f"公司阶段: {profile.get('company_stage', '未知')}")
-            st.write(f"购买阶段: {profile.get('buying_stage', '未知')}")
-            st.write(f"紧迫程度: {profile.get('urgency', '未知')}")
+            st.markdown("**核心信息**")
+            # 需求
+            req = profile.get('requirement', '未明确表达')
+            st.write(f"**需求**: {req}")
+            # 满意程度
+            sat = profile.get('satisfaction_level', 5)
+            st.write(f"**满意程度**: {sat}/10")
+            # 是否有效线索
+            is_valid = profile.get('is_valid_lead', '否')
+            has_contact = profile.get('has_contact_info', '否')
+            quality = profile.get('lead_quality', '低')
+            st.write(f"**线索质量**: {quality} | 有效: {is_valid} | 有联系方式: {has_contact}")
 
         with col_right:
             st.markdown("**核心痛点**")
-            for pain in profile.get("pain_points", []):
-                st.write(f"- {pain}")
-            if not profile.get("pain_points"):
+            pains = profile.get("pain_points", [])
+            if pains:
+                for pain in pains[:3]:  # 最多显示3个
+                    st.write(f"- {pain}")
+            else:
                 st.write("暂无")
 
     def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":
