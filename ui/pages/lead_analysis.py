@@ -59,12 +59,12 @@ class LeadAnalysisPage(AnalysisPage):
                     st.info("请检查API Key是否有效，或稍后重试。")
 
     def _render_batch_input(self):
-        """渲染批量导入界面（支持 CSV/Excel）"""
+        """渲染批量导入界面（支持 CSV/Excel/Word/PDF）"""
         st.subheader("批量导入线索")
 
         uploaded_file = st.file_uploader(
-            "上传文件（支持 CSV、Excel .xlsx）",
-            type=["csv", "xlsx", "xls"],
+            "上传文件（支持 CSV、Excel、Word、PDF）",
+            type=["csv", "xlsx", "xls", "docx", "doc", "pdf"],
             key="lead_batch_file"
         )
 
@@ -85,18 +85,23 @@ class LeadAnalysisPage(AnalysisPage):
                 validate_mapping_for_analysis,
             )
 
-            # 读取CSV或Excel并显示字段映射
+            # 读取文件并显示字段映射
             if st.session_state.lead_df is None:
                 import io
                 import csv
                 file_type = uploaded_file.name.lower().split(".")[-1]
+
                 if file_type in ["xlsx", "xls"]:
                     st.session_state.lead_df = pd.read_excel(uploaded_file)
+                elif file_type == "pdf":
+                    st.session_state.lead_df = self._parse_pdf(uploaded_file)
+                elif file_type in ["docx", "doc"]:
+                    st.session_state.lead_df = self._parse_word(uploaded_file)
                 else:
                     # CSV文件：先将内容读入内存，再用BytesIO解析
                     file_bytes = uploaded_file.getvalue()
                     csv_file = io.BytesIO(file_bytes)
-                    
+
                     # 尝试多种编码和分隔符读取CSV
                     success = False
                     for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
@@ -112,12 +117,16 @@ class LeadAnalysisPage(AnalysisPage):
                                     break
                             except Exception:
                                 continue
-                    
+
                     if not success:
                         st.error("无法解析CSV文件，请检查文件格式或尝试使用Excel格式(.xlsx)")
                         return
 
             df = st.session_state.lead_df
+
+            if df is None or len(df) == 0:
+                callout("文件解析失败或无有效内容", type="error")
+                return
 
             # ===== 简化的字段映射：只需选择"需求描述"列 =====
             st.markdown("---")
@@ -478,6 +487,78 @@ class LeadAnalysisPage(AnalysisPage):
                 st.write(f"- {pain}")
             if not profile.get("pain_points"):
                 st.write("暂无")
+
+    def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":
+        """解析 PDF 文件，提取文本内容"""
+        import pandas as pd
+        from PyPDF2 import PdfReader
+
+        try:
+            pdf_reader = PdfReader(uploaded_file)
+            texts = []
+
+            for i, page in enumerate(pdf_reader.pages):
+                text = page.extract_text()
+                if text and text.strip():
+                    texts.append({
+                        "需求描述": text.strip(),
+                        "页码": i + 1,
+                    })
+
+            if not texts:
+                st.warning("PDF 文件未提取到有效文本内容")
+                return pd.DataFrame()
+
+            df = pd.DataFrame(texts)
+            st.success(f"✅ 成功从 PDF 提取 {len(df)} 页内容")
+            return df
+
+        except Exception as e:
+            st.error(f"PDF 解析失败: {str(e)}")
+            return pd.DataFrame()
+
+    def _parse_word(self, uploaded_file) -> "pd.DataFrame":
+        """解析 Word 文件，提取文本内容"""
+        import pandas as pd
+        from docx import Document
+
+        try:
+            doc = Document(uploaded_file)
+
+            # 先尝试提取表格
+            tables_data = []
+            for table in doc.tables:
+                for row in table.rows:
+                    row_data = [cell.text.strip() for cell in row.cells]
+                    if any(row_data):
+                        tables_data.append(row_data)
+
+            if tables_data and len(tables_data) > 1:
+                df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
+                st.success(f"✅ 成功从 Word 表格提取 {len(df)} 条记录")
+                return df
+
+            # 没有表格，提取段落文本
+            paragraphs = []
+            for i, para in enumerate(doc.paragraphs):
+                text = para.text.strip()
+                if text and len(text) > 20:
+                    paragraphs.append({
+                        "需求描述": text,
+                        "段落": i + 1,
+                    })
+
+            if not paragraphs:
+                st.warning("Word 文档未提取到有效文本内容")
+                return pd.DataFrame()
+
+            df = pd.DataFrame(paragraphs)
+            st.success(f"✅ 成功从 Word 提取 {len(df)} 个段落")
+            return df
+
+        except Exception as e:
+            st.error(f"Word 解析失败: {str(e)}")
+            return pd.DataFrame()
 
     def _render_history(self):
         """展示历史记录"""
