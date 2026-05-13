@@ -376,65 +376,44 @@ class ContentAnalysisPage(AnalysisPage):
     def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":
         """解析 PDF 文件，提取文本内容
 
-        优先提取表格，其次按页提取文本
+        默认按页提取文本，用户可选择表格模式
         """
         import pandas as pd
-        import io
+
+        # 让用户选择解析模式
+        parse_mode = st.radio(
+            "PDF 解析模式",
+            options=["按页提取（推荐）", "表格提取"],
+            horizontal=True,
+            help="按页提取：每页作为一个脚本；表格提取：尝试识别PDF中的表格结构",
+        )
 
         try:
-            # 优先使用 pdfplumber（更好的表格支持）
-            try:
-                import pdfplumber
+            if parse_mode == "表格提取":
+                return self._parse_pdf_as_table(uploaded_file)
+            else:
+                return self._parse_pdf_as_text(uploaded_file)
+        except Exception as e:
+            st.error(f"PDF 解析失败: {str(e)}")
+            return pd.DataFrame()
 
-                with pdfplumber.open(uploaded_file) as pdf:
-                    # 1. 尝试提取所有表格
-                    all_tables = []
-                    for page in pdf.pages:
-                        tables = page.extract_tables()
-                        for table in tables:
-                            # 清理表格数据
-                            cleaned = []
-                            for row in table:
-                                cleaned_row = [
-                                    (cell or "").strip() for cell in row
-                                ]
-                                # 跳过全空行
-                                if any(cell for cell in cleaned_row):
-                                    cleaned.append(cleaned_row)
-                            if cleaned:
-                                all_tables.extend(cleaned)
+    def _parse_pdf_as_text(self, uploaded_file) -> "pd.DataFrame":
+        """按页提取 PDF 文本"""
+        import pandas as pd
 
-                    if all_tables and len(all_tables) > 1:
-                        # 有表格数据，第一行作为表头
-                        headers = all_tables[0]
-                        df = pd.DataFrame(all_tables[1:], columns=headers)
-                        # 过滤掉全空行和无效行
-                        df = df.dropna(how="all")
-                        df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
-                        st.success(f"✅ 成功从 PDF 表格提取 {len(df)} 条记录")
-                        return df
-
-                    # 2. 没有表格，按页提取文本
-                    texts = []
-                    for i, page in enumerate(pdf.pages):
-                        text = page.extract_text()
-                        if text and text.strip():
-                            texts.append({
-                                "脚本内容": text.strip(),
-                                "页码": i + 1,
-                            })
-
-                    if texts:
-                        df = pd.DataFrame(texts)
-                        st.success(f"✅ 成功从 PDF 提取 {len(df)} 页内容")
-                        return df
-
-            except ImportError:
-                pass
-
-            # 回退到 PyPDF2
+        try:
+            import pdfplumber
+            with pdfplumber.open(uploaded_file) as pdf:
+                texts = []
+                for i, page in enumerate(pdf.pages):
+                    text = page.extract_text()
+                    if text and text.strip():
+                        texts.append({
+                            "脚本内容": text.strip(),
+                            "页码": i + 1,
+                        })
+        except ImportError:
             from PyPDF2 import PdfReader
-
             pdf_reader = PdfReader(uploaded_file)
             texts = []
             for i, page in enumerate(pdf_reader.pages):
@@ -445,17 +424,51 @@ class ContentAnalysisPage(AnalysisPage):
                         "页码": i + 1,
                     })
 
-            if not texts:
-                st.warning("PDF 文件未提取到有效文本内容")
-                return pd.DataFrame()
-
-            df = pd.DataFrame(texts)
-            st.success(f"✅ 成功从 PDF 提取 {len(df)} 页内容")
-            return df
-
-        except Exception as e:
-            st.error(f"PDF 解析失败: {str(e)}")
+        if not texts:
+            st.warning("PDF 文件未提取到有效文本内容")
             return pd.DataFrame()
+
+        df = pd.DataFrame(texts)
+        st.success(f"✅ 成功从 PDF 提取 {len(df)} 页内容")
+        return df
+
+    def _parse_pdf_as_table(self, uploaded_file) -> "pd.DataFrame":
+        """尝试从 PDF 提取表格"""
+        import pandas as pd
+
+        try:
+            import pdfplumber
+            with pdfplumber.open(uploaded_file) as pdf:
+                all_tables = []
+                for page in pdf.pages:
+                    tables = page.extract_tables()
+                    for table in tables:
+                        cleaned = []
+                        for row in table:
+                            cleaned_row = [(cell or "").strip() for cell in row]
+                            if any(cell for cell in cleaned_row):
+                                cleaned.append(cleaned_row)
+                        if cleaned:
+                            all_tables.extend(cleaned)
+        except ImportError:
+            st.error("表格模式需要 pdfplumber 库，当前不可用，请使用按页提取模式")
+            return pd.DataFrame()
+
+        if not all_tables or len(all_tables) <= 1:
+            st.warning("未检测到有效表格，请尝试按页提取模式")
+            return pd.DataFrame()
+
+        headers = all_tables[0]
+        df = pd.DataFrame(all_tables[1:], columns=headers)
+        df = df.dropna(how="all")
+        df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
+
+        if len(df) == 0:
+            st.warning("表格数据为空，请尝试按页提取模式")
+            return pd.DataFrame()
+
+        st.success(f"✅ 成功从 PDF 表格提取 {len(df)} 条记录")
+        return df
 
     def _parse_word(self, uploaded_file) -> "pd.DataFrame":
         """解析 Word 文件，提取文本内容
@@ -466,74 +479,98 @@ class ContentAnalysisPage(AnalysisPage):
         """
         import pandas as pd
         from docx import Document
-        import io
 
         try:
             doc = Document(uploaded_file)
 
-            # 先尝试提取表格
-            tables_data = []
-            for table in doc.tables:
-                for row in table.rows:
-                    # 去重合并单元格（python-docx 对合并单元格会重复返回）
-                    seen_texts = set()
-                    row_data = []
-                    for cell in row.cells:
-                        text = cell.text.strip()
-                        if text and text not in seen_texts:
-                            seen_texts.add(text)
-                            row_data.append(text)
-                    if any(row_data):
-                        tables_data.append(row_data)
+            # 检查是否有表格
+            has_tables = len(doc.tables) > 0
 
-            if tables_data and len(tables_data) > 1:
-                # 有表格数据，第一行作为表头
-                headers = tables_data[0]
-                df = pd.DataFrame(tables_data[1:], columns=headers)
-                # 过滤掉全空行
-                df = df.dropna(how="all")
-                # 过滤掉所有列都为空的行
-                df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
-                st.success(f"✅ 成功从 Word 表格提取 {len(df)} 条记录")
-                return df
+            if has_tables:
+                parse_mode = st.radio(
+                    "Word 解析模式",
+                    options=["表格提取（推荐）", "段落提取"],
+                    horizontal=True,
+                    help="表格提取：提取文档中的表格数据；段落提取：按段落提取文本",
+                )
+            else:
+                parse_mode = "段落提取"
 
-            # 没有表格，提取段落文本（智能合并连续短段落）
-            paragraphs = []
-            buffer = ""
-
-            for i, para in enumerate(doc.paragraphs):
-                text = para.text.strip()
-                if not text:
-                    # 空段落：如果 buffer 有内容，保存
-                    if buffer and len(buffer) > 20:
-                        paragraphs.append(buffer.strip())
-                    buffer = ""
-                    continue
-
-                # 如果当前段落很短且 buffer 也不长，合并
-                if len(text) < 30 and len(buffer) < 200:
-                    buffer += text
-                else:
-                    # 保存 buffer
-                    if buffer and len(buffer) > 20:
-                        paragraphs.append(buffer.strip())
-                    buffer = text
-
-            # 保存最后一个 buffer
-            if buffer and len(buffer) > 20:
-                paragraphs.append(buffer.strip())
-
-            if not paragraphs:
-                st.warning("Word 文档未提取到有效文本内容")
-                return pd.DataFrame()
-
-            df = pd.DataFrame({"脚本内容": paragraphs})
-            st.success(f"✅ 成功从 Word 提取 {len(df)} 个段落")
-            return df
+            if parse_mode == "表格提取":
+                return self._parse_word_as_table(doc)
+            else:
+                return self._parse_word_as_paragraphs(doc)
 
         except Exception as e:
             st.error(f"Word 解析失败: {str(e)}")
             return pd.DataFrame()
+
+    def _parse_word_as_table(self, doc) -> "pd.DataFrame":
+        """从 Word 文档提取表格数据"""
+        import pandas as pd
+
+        tables_data = []
+        for table in doc.tables:
+            for row in table.rows:
+                # 去重合并单元格
+                seen_texts = set()
+                row_data = []
+                for cell in row.cells:
+                    text = cell.text.strip()
+                    if text and text not in seen_texts:
+                        seen_texts.add(text)
+                        row_data.append(text)
+                if any(row_data):
+                    tables_data.append(row_data)
+
+        if not tables_data or len(tables_data) <= 1:
+            st.warning("未检测到有效表格，请尝试段落提取模式")
+            return pd.DataFrame()
+
+        headers = tables_data[0]
+        df = pd.DataFrame(tables_data[1:], columns=headers)
+        df = df.dropna(how="all")
+        df = df[~df.apply(lambda row: all(str(v).strip() in ["", "nan", "None"] for v in row), axis=1)]
+
+        if len(df) == 0:
+            st.warning("表格数据为空，请尝试段落提取模式")
+            return pd.DataFrame()
+
+        st.success(f"✅ 成功从 Word 表格提取 {len(df)} 条记录")
+        return df
+
+    def _parse_word_as_paragraphs(self, doc) -> "pd.DataFrame":
+        """从 Word 文档提取段落文本（智能合并连续短段落）"""
+        import pandas as pd
+
+        paragraphs = []
+        buffer = ""
+
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                if buffer and len(buffer) > 20:
+                    paragraphs.append(buffer.strip())
+                buffer = ""
+                continue
+
+            if len(text) < 30 and len(buffer) < 200:
+                buffer += text
+            else:
+                if buffer and len(buffer) > 20:
+                    paragraphs.append(buffer.strip())
+                buffer = text
+
+        if buffer and len(buffer) > 20:
+            paragraphs.append(buffer.strip())
+
+        if not paragraphs:
+            st.warning("Word 文档未提取到有效文本内容")
+            return pd.DataFrame()
+
+        df = pd.DataFrame({"脚本内容": paragraphs})
+        st.success(f"✅ 成功从 Word 提取 {len(df)} 个段落")
+        return df
 
     def _display_result(self, result: dict):
         """展示单个分析结果"""
