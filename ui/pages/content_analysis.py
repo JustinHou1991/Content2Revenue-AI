@@ -210,7 +210,7 @@ class ContentAnalysisPage(AnalysisPage):
                     use_container_width=True,
                 )
 
-                if batch_btn:
+                if batch_btn or st.session_state.get("batch_state", {}).get("running"):
                     self._handle_batch_analysis()
             else:
                 st.warning("请选择包含脚本内容的列")
@@ -364,18 +364,64 @@ class ContentAnalysisPage(AnalysisPage):
     def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":
         """解析 PDF 文件，提取文本内容
 
-        支持两种模式：
-        1. 每个 PDF 页面作为一条脚本
-        2. 如果 PDF 是表格形式，尝试提取为结构化数据
+        优先提取表格，其次按页提取文本
         """
         import pandas as pd
         import io
-        from PyPDF2 import PdfReader
 
         try:
+            # 优先使用 pdfplumber（更好的表格支持）
+            try:
+                import pdfplumber
+
+                with pdfplumber.open(uploaded_file) as pdf:
+                    # 1. 尝试提取所有表格
+                    all_tables = []
+                    for page in pdf.pages:
+                        tables = page.extract_tables()
+                        for table in tables:
+                            # 清理表格数据
+                            cleaned = []
+                            for row in table:
+                                cleaned_row = [
+                                    (cell or "").strip() for cell in row
+                                ]
+                                if any(cleaned_row):
+                                    cleaned.append(cleaned_row)
+                            if cleaned:
+                                all_tables.extend(cleaned)
+
+                    if all_tables and len(all_tables) > 1:
+                        # 有表格数据，第一行作为表头
+                        df = pd.DataFrame(all_tables[1:], columns=all_tables[0])
+                        # 过滤掉全空行
+                        df = df.dropna(how="all")
+                        st.success(f"✅ 成功从 PDF 表格提取 {len(df)} 条记录")
+                        return df
+
+                    # 2. 没有表格，按页提取文本
+                    texts = []
+                    for i, page in enumerate(pdf.pages):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            texts.append({
+                                "脚本内容": text.strip(),
+                                "页码": i + 1,
+                            })
+
+                    if texts:
+                        df = pd.DataFrame(texts)
+                        st.success(f"✅ 成功从 PDF 提取 {len(df)} 页内容")
+                        return df
+
+            except ImportError:
+                pass
+
+            # 回退到 PyPDF2
+            from PyPDF2 import PdfReader
+
             pdf_reader = PdfReader(uploaded_file)
             texts = []
-
             for i, page in enumerate(pdf_reader.pages):
                 text = page.extract_text()
                 if text and text.strip():
