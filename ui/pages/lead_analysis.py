@@ -175,18 +175,18 @@ class LeadAnalysisPage(AnalysisPage):
                 st.session_state.lead_field_mapping = {"需求描述": selected_col}
                 st.success(f"✅ 已选择「{selected_col}」作为线索描述列（共 {len(df)} 条记录）")
 
-                # 预览前3条数据
-                with st.expander("预览数据"):
-                    preview_cols = [selected_col]
-                    # 额外显示公司名称、联系人等辅助列（如果有）
-                    for extra_col in df.columns:
-                        if extra_col != selected_col:
-                            for kw in ["公司", "企业", "联系人", "姓名", "行业", "电话", "手机"]:
-                                if kw in str(extra_col):
-                                    preview_cols.append(extra_col)
-                                    break
-                    preview_cols = preview_cols[:4]  # 最多显示4列
-                    st.dataframe(df[preview_cols].head(3), use_container_width=True)
+                # 预览前5条数据，帮助用户确认选择正确
+                with st.expander("预览数据（请确认内容是否为客户需求）"):
+                    preview_data = df[selected_col].head(5).tolist()
+                    for i, val in enumerate(preview_data, 1):
+                        val_str = str(val)[:100] if val else "(空)"
+                        st.write(f"{i}. {val_str}")
+                    
+                    # 检查是否包含抖音系统消息
+                    system_keywords = ["在抖音", "发起了", "输入了手机号"]
+                    has_system_msg = any(any(kw in str(v) for kw in system_keywords) for v in preview_data if v)
+                    if has_system_msg:
+                        st.warning("⚠️ 检测到抖音系统消息（如'在抖音私信输入了手机号'）。这些不是客户需求，请尝试选择其他列，如'客户留言'、'咨询内容'等。")
 
                 # 批量分析按钮
                 batch_btn = st.button(
@@ -260,18 +260,19 @@ class LeadAnalysisPage(AnalysisPage):
         with st.expander("查看清洗后的数据"):
             st.dataframe(df.head(10))
 
-        # ---- 关键调试：直接检查 desc_col 的数据 ----
-        st.write(f"**调试信息：** 选择的列为 `{desc_col}`，该列存在于 DataFrame: {desc_col in df.columns}")
-        if desc_col in df.columns:
-            sample_vals = df[desc_col].head(10).tolist()
-            st.write(f"前10个值:")
-            for i, v in enumerate(sample_vals):
-                st.write(f"  [{i}] type={type(v).__name__}, len={len(str(v))}, val={repr(v)[:80]}")
-
         # ---- 提取线索数据 ----
         leads = []
         seen_texts = set()
-        skip_reasons = {"empty": 0, "nan": 0, "duplicate": 0}
+        skip_reasons = {"empty": 0, "nan": 0, "duplicate": 0, "system_msg": 0}
+        
+        # 抖音系统消息关键词（这些不是客户需求）
+        system_keywords = [
+            "在抖音私信输入了手机号",
+            "在抖音企业主页发起了通话",
+            "在抖音私信发起了通话",
+            "在抖音主页发起了咨询",
+            "通过抖音广告进入",
+        ]
         
         for idx, row in df.iterrows():
             # 直接从原始列获取需求描述
@@ -286,6 +287,12 @@ class LeadAnalysisPage(AnalysisPage):
                 continue
             if conversation.lower() in ["nan", "none", "", "null"]:
                 skip_reasons["nan"] += 1
+                continue
+            
+            # 过滤抖音系统消息
+            is_system_msg = any(keyword in conversation for keyword in system_keywords)
+            if is_system_msg:
+                skip_reasons["system_msg"] += 1
                 continue
 
             # 过滤重复内容
@@ -310,18 +317,24 @@ class LeadAnalysisPage(AnalysisPage):
             })
         
         # 显示跳过原因统计
-        if skip_reasons["empty"] > 0 or skip_reasons["nan"] > 0 or skip_reasons["duplicate"] > 0:
+        total_skipped = sum(skip_reasons.values())
+        if total_skipped > 0:
             with st.expander("🔍 数据提取详情"):
                 st.write(f"跳过原因统计：")
                 st.write(f"- 空内容: {skip_reasons['empty']} 行")
                 st.write(f"- NaN/None/Null: {skip_reasons['nan']} 行")
                 st.write(f"- 重复内容: {skip_reasons['duplicate']} 行")
+                st.write(f"- 抖音系统消息: {skip_reasons['system_msg']} 行")
+                if skip_reasons['system_msg'] > 0:
+                    st.info("💡 提示：大量数据被识别为抖音系统消息（如'在抖音私信输入了手机号'）。请检查是否选择了包含客户实际需求的列，而不是'最新互动记录'系统列。")
                 # 显示前5条被提取的线索
                 if leads:
                     st.write(f"---")
                     st.write(f"✅ 前5条被提取的线索:")
                     for lead in leads[:5]:
                         st.write(f"- {lead['lead_data'].get('conversation', '')[:60]}...")
+                else:
+                    st.warning("⚠️ 没有提取到任何有效线索。请确认上传的文件中包含客户的实际需求描述（如留言、咨询内容），而不是系统操作记录。")
 
         # 显示提取统计
         total_rows = len(df)
