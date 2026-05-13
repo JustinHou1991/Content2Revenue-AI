@@ -91,7 +91,6 @@ class BaseAnalyzer(ABC):
             return {}
         return output
 
-    @cached(ttl=3600)
     def analyze(self, input_data: Any) -> Dict[str, Any]:
         """主分析流程（模板方法模式）
 

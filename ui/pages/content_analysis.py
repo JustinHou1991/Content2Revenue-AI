@@ -260,19 +260,27 @@ class ContentAnalysisPage(AnalysisPage):
 
         # 执行批量分析
         results = []
+        total = len(scripts)
+        logger.info("开始批量分析，共 %d 条脚本", total)
+
         try:
             for i, script in enumerate(scripts):
                 # 检查取消事件
                 if cancel_event.is_set():
-                    callout(f"分析已取消，已完成 {i}/{len(scripts)} 条", type="warning")
+                    callout(f"分析已取消，已完成 {i}/{total} 条", type="warning")
                     break
 
                 try:
+                    logger.info("正在分析第 %d/%d 条脚本 (script_id=%s)", i + 1, total, script.get("script_id"))
+
                     # 传入唯一的 script_id 确保每条结果独立保存
                     single_result = self._get_orchestrator().content_analyzer.analyze(
                         script_text=script["script_text"],
                         script_id=script["script_id"],
                     )
+
+                    logger.info("第 %d 条脚本分析完成，content_id=%s", i + 1, single_result.get("content_id"))
+
                     # 保存到数据库
                     self._get_orchestrator().db.save_content_analysis(single_result)
                     results.append({
@@ -281,6 +289,7 @@ class ContentAnalysisPage(AnalysisPage):
                         "data": single_result,
                     })
                 except Exception as e:
+                    logger.error("第 %d 条脚本分析失败: %s", i + 1, e)
                     results.append({
                         "success": False,
                         "index": i,
@@ -301,19 +310,27 @@ class ContentAnalysisPage(AnalysisPage):
 
             # 显示结果统计
             success_count = sum(1 for r in results if r.get("success"))
+            fail_count = sum(1 for r in results if not r.get("success"))
             processed_count = len(results)
+
+            # 验证数据库实际保存数量
+            try:
+                db_count = len(self._get_orchestrator().db.get_all_content_analyses())
+            except Exception:
+                db_count = -1
 
             if cancel_event.is_set() or st.session_state.get("cancel_batch_analysis"):
                 callout(
-                    f"批量分析已取消！成功 {success_count}/{processed_count} 条（共 {len(scripts)} 条）",
+                    f"批量分析已取消！成功 {success_count}/{processed_count} 条（共 {total} 条）",
                     type="warning",
                 )
             else:
-                callout(
-                    f"批量分析完成！成功 {success_count}/{len(scripts)} 条",
-                    type="success",
-                    icon="&#10003;",
-                )
+                msg = f"批量分析完成！成功 {success_count}/{total} 条"
+                if fail_count > 0:
+                    msg += f"（{fail_count} 条失败）"
+                if db_count >= 0:
+                    msg += f" | 数据库共 {db_count} 条记录"
+                callout(msg, type="success", icon="&#10003;")
 
             # 展示结果
             divider()
