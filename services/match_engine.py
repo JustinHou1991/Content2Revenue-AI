@@ -222,6 +222,23 @@ class MatchEngine(BaseAnalyzer):
         # 确保列表字段
         self._ensure_list_field(output, "risk_factors")
 
+        # 补全 gap_analysis 字段
+        if "gap_analysis" not in output:
+            output["gap_analysis"] = {}
+        gap = output["gap_analysis"]
+        if "weakest_dimension" not in gap:
+            # 自动找出最弱维度
+            dims = output.get("dimension_scores", {})
+            if dims:
+                weakest = min(dims.items(), key=lambda x: x[1])
+                gap["weakest_dimension"] = weakest[0]
+            else:
+                gap["weakest_dimension"] = "未知"
+        if "gap_reason" not in gap:
+            gap["gap_reason"] = "未提供具体原因"
+        if "improvement_suggestion" not in gap:
+            gap["improvement_suggestion"] = "建议优化内容以更好地匹配线索需求"
+
         return output
 
     def _build_result(
