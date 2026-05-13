@@ -66,11 +66,14 @@ class MatchEngine(BaseAnalyzer):
         }
         return super().analyze(input_data)
 
-    def _validate_input(self, input_data: Any) -> None:
+    def _validate_input(self, input_data: Any) -> Any:
         """验证输入数据
 
         Args:
             input_data: 输入数据字典
+
+        Returns:
+            验证通过的输入数据
 
         Raises:
             ValueError: 输入数据无效时
@@ -83,6 +86,7 @@ class MatchEngine(BaseAnalyzer):
             raise ValueError("内容特征不能为空")
         if not lead_profile:
             raise ValueError("线索画像不能为空")
+        return input_data
 
     def _build_prompt_from_input(self, input_data: Any) -> str:
         """根据输入数据构建提示词

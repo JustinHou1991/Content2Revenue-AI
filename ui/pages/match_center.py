@@ -90,8 +90,8 @@ class MatchCenterPage(MatchPage):
         st.subheader("选择匹配对象")
 
         try:
-            contents = self._get_orchestrator().db.get_all_content_analyses(limit=50)
-            leads = self._get_orchestrator().db.get_all_lead_analyses(limit=50)
+            contents = self._get_orchestrator().db.get_all_content_analyses(limit=500)
+            leads = self._get_orchestrator().db.get_all_lead_analyses(limit=500)
         except Exception as e:
             callout(f"加载数据失败: {str(e)}", type="error")
             return
@@ -104,6 +104,8 @@ class MatchCenterPage(MatchPage):
             callout("暂无线索分析记录，请先去「线索分析」页面分析线索", type="warning")
             st.info("提示：你可以在「系统设置」中点击「加载示例数据」快速体验。")
             return
+
+        st.caption(f"📊 可选内容: {len(contents)} 条 | 可选线索: {len(leads)} 条")
 
         # 构建选项（优化：显示更多关键信息）
         content_options = {}
