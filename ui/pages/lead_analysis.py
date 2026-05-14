@@ -203,7 +203,7 @@ class LeadAnalysisPage(AnalysisPage):
                     use_container_width=True,
                 )
 
-                if batch_btn:
+                if batch_btn or st.session_state.get("lead_analysis_task_id"):
                     self._handle_batch_analysis()
             else:
                 st.warning("请选择包含线索描述的列")
