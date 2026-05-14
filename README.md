@@ -403,7 +403,7 @@ Business Source License 1.1 (BSL 1.1)
 ### 商业授权
 
 如需商业授权、定制开发或技术支持，请联系：
-- Email: justinhou@example.com
+- Email: junting_4113@qq.com
 
 ---
 
