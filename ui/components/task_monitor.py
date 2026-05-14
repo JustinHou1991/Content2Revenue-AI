@@ -75,13 +75,13 @@ def check_and_resume_task(task_id: str) -> Optional[Dict[str, Any]]:
     elif status == TaskStatus.CANCELLED.value:
         st.warning("⚠️ 任务已取消")
         return task
-    elif status == TaskStatus.RUNNING.value:
-        # 任务仍在运行，显示进度
+    elif status in (TaskStatus.RUNNING.value, TaskStatus.PENDING.value):
         progress = task.get("progress", 0)
         current = task.get("current", 0)
         total = task.get("total", 0)
-        st.info(f"⏳ 任务进行中... {current}/{total} ({progress}%)")
-        st.progress(progress / 100)
+        status_label = "准备中" if status == TaskStatus.PENDING.value else "进行中"
+        st.info(f"⏳ 任务{status_label}... {current}/{total} ({progress}%)")
+        st.progress(progress / 100 if progress > 0 else 0.01)
         return task
     
     return task

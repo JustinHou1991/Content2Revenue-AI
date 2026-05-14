@@ -186,9 +186,10 @@ class MatchCenterPage(MatchPage):
                     st.error(f"❌ 批量匹配失败: {task.get('error', '未知错误')}")
                     st.session_state.batch_match_task_id = None
                     return
-                elif status == "running":
+                elif status in ("running", "pending"):
                     progress = task.get("progress", 0)
-                    st.info(f"⏳ 匹配任务进行中... ({progress}%)")
+                    status_label = "准备中" if status == "pending" else "进行中"
+                    st.info(f"⏳ 匹配任务{status_label}... ({progress}%)")
                     st.progress(progress / 100 if progress > 0 else 0.01,
                                 text=f"匹配中... {progress}%")
                     time.sleep(2)

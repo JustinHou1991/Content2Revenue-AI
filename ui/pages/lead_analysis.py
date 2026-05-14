@@ -374,10 +374,11 @@ class LeadAnalysisPage(AnalysisPage):
                     st.session_state.lead_df = None
                     st.session_state.lead_field_mapping = None
                     return
-                elif status == "running":
+                elif status in ("running", "pending"):
                     progress = task.get("progress", 0)
                     current = task.get("current", 0)
-                    st.info(f"⏳ 任务进行中... {current}/{total} ({progress}%)")
+                    status_label = "准备中" if status == "pending" else "进行中"
+                    st.info(f"⏳ 任务{status_label}... {current}/{total} ({progress}%)")
                     st.progress(progress / 100 if progress > 0 else 0.01,
                                 text=f"分析中 {current}/{total}")
                     time.sleep(2)

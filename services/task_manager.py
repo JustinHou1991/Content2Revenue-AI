@@ -40,8 +40,7 @@ class BackgroundTaskManager:
     _instance = None
     _lock = threading.Lock()
     
-    def __new__(cls, db: Database = None):
-        """单例模式"""
+    def __new__(cls, db: Database = None, model: str = "deepseek-chat", api_key: str = ""):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -165,9 +164,11 @@ class BackgroundTaskManager:
         total = len(scripts)
         results = []
         
-        self._update_task_progress(task_id, 0, total, 0)
+        self._update_task_progress(task_id, 0, total, 5)
         
         for i, script in enumerate(scripts):
+            self._update_task_progress(task_id, i, total, max(5, int(i / total * 100)))
+            
             try:
                 result = orchestrator.content_analyzer.analyze(script)
                 orchestrator.db.save_content_analysis(result)
@@ -176,8 +177,7 @@ class BackgroundTaskManager:
                 logger.error(f"内容分析失败 (item {i+1}/{total}): {e}")
                 results.append({"success": False, "error": str(e)})
             
-            progress = int((i + 1) / total * 100)
-            self._update_task_progress(task_id, i + 1, total, progress)
+            self._update_task_progress(task_id, i + 1, total, int((i + 1) / total * 100))
         
         return {
             "total": total,
@@ -194,9 +194,11 @@ class BackgroundTaskManager:
         total = len(leads)
         results = []
         
-        self._update_task_progress(task_id, 0, total, 0)
+        self._update_task_progress(task_id, 0, total, 5)
         
         for i, lead in enumerate(leads):
+            self._update_task_progress(task_id, i, total, max(5, int(i / total * 100)))
+            
             try:
                 result = orchestrator.lead_analyzer.analyze(
                     lead_data=lead.get("lead_data", {}),
@@ -208,8 +210,7 @@ class BackgroundTaskManager:
                 logger.error(f"线索分析失败 (item {i+1}/{total}): {e}")
                 results.append({"success": False, "error": str(e)})
             
-            progress = int((i + 1) / total * 100)
-            self._update_task_progress(task_id, i + 1, total, progress)
+            self._update_task_progress(task_id, i + 1, total, int((i + 1) / total * 100))
         
         return {
             "total": total,
@@ -224,9 +225,88 @@ class BackgroundTaskManager:
         orchestrator = Orchestrator(model=self.model, api_key=self.api_key)
         top_k = task_data.get("top_k", 3)
         
-        results = orchestrator.batch_match(top_k=top_k)
+        contents = orchestrator.db.get_all_content_analyses(limit=500)
+        leads = orchestrator.db.get_all_lead_analyses(limit=500)
+        total_leads = len(leads)
         
-        self._update_task_progress(task_id, len(results), len(results), 100)
+        if not contents or not leads:
+            self._update_task_progress(task_id, 0, 0, 100)
+            return {"total_matches": 0, "results": []}
+        
+        self._update_task_progress(task_id, 0, total_leads, 5)
+        
+        content_list = [
+            {"analysis": c["analysis_json"], "content_id": c["id"]} for c in contents
+        ]
+        lead_list = [
+            {
+                "profile": lead["profile_json"],
+                "lead_id": lead["id"],
+                "raw_data": lead.get("raw_data_json", {}),
+            }
+            for lead in leads
+        ]
+        
+        results = []
+        match_results_to_save = []
+        
+        for i, lead_data_item in enumerate(lead_list):
+            lead_id = lead_data_item["lead_id"]
+            
+            self._update_task_progress(task_id, i, total_leads, max(5, int(i / total_leads * 90)))
+            
+            matches = []
+            for content_item in content_list:
+                try:
+                    match_result = orchestrator.match_engine.match(
+                        content_item["analysis"],
+                        lead_data_item["profile"],
+                        content_id=content_item.get("content_id"),
+                        lead_id=lead_id,
+                    )
+                    matches.append({
+                        "content_id": content_item.get("content_id"),
+                        "content_snapshot": match_result.get("content_snapshot", {}),
+                        "match_result": match_result.get("match_result", {}),
+                    })
+                except Exception as e:
+                    logger.error(f"匹配失败 lead={lead_id}: {e}")
+                    matches.append({"error": str(e)})
+            
+            matches.sort(
+                key=lambda m: m.get("match_result", {}).get("overall_score", 0),
+                reverse=True,
+            )
+            top_matches = matches[:top_k]
+            
+            lead_snapshot = orchestrator._build_lead_snapshot(
+                orchestrator.db.get_lead_analysis(lead_id) or {"profile_json": lead_data_item["profile"], "raw_data_json": lead_data_item.get("raw_data", {})}
+            )
+            
+            results.append({
+                "lead_id": lead_id,
+                "lead_snapshot": lead_snapshot,
+                "top_matches": top_matches,
+            })
+            
+            for match in top_matches:
+                if "error" not in match and "match_id" not in match:
+                    import uuid
+                    match["match_id"] = str(uuid.uuid4())
+                if "error" not in match:
+                    match.setdefault("content_snapshot", {})["content_id"] = match.get("content_id", "")
+                    match.setdefault("lead_snapshot", {})["lead_id"] = lead_id
+                    match_results_to_save.append(match)
+            
+            self._update_task_progress(task_id, i + 1, total_leads, int((i + 1) / total_leads * 90))
+        
+        if match_results_to_save:
+            try:
+                orchestrator.db.save_match_results_batch(match_results_to_save)
+            except Exception as e:
+                logger.error(f"批量保存匹配结果失败: {e}")
+        
+        self._update_task_progress(task_id, total_leads, total_leads, 100)
         
         return {
             "total_matches": len(results),
@@ -267,7 +347,7 @@ class BackgroundTaskManager:
         # 从数据库加载任务列表
         if self.db:
             try:
-                with self.db._get_connection() as conn:
+                with self.db._get_conn() as conn:
                     if status:
                         rows = conn.execute(
                             "SELECT * FROM background_tasks WHERE status = ? ORDER BY created_at DESC",
@@ -285,8 +365,10 @@ class BackgroundTaskManager:
         return []
     
     def get_running_tasks(self) -> List[Dict[str, Any]]:
-        """获取进行中的任务"""
-        return self.get_user_tasks(TaskStatus.RUNNING)
+        """获取进行中的任务（包括pending和running）"""
+        tasks = self.get_user_tasks(TaskStatus.RUNNING)
+        pending_tasks = self.get_user_tasks(TaskStatus.PENDING)
+        return tasks + pending_tasks
     
     def pause_task(self, task_id: str):
         """暂停任务（页面切换时调用）"""
@@ -304,7 +386,7 @@ class BackgroundTaskManager:
             return
         
         try:
-            with self.db._get_connection() as conn:
+            with self.db._get_conn() as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO background_tasks (
                         task_id, task_type, status, progress, total, current,
@@ -317,12 +399,12 @@ class BackgroundTaskManager:
                     task_record["progress"],
                     task_record["total"],
                     task_record["current"],
-                    task_record["task_data"],
-                    json.dumps(task_record["result"]) if task_record["result"] else None,
-                    task_record["error"],
+                    json.dumps(task_record["task_data"]) if isinstance(task_record.get("task_data"), dict) else task_record.get("task_data", "{}"),
+                    json.dumps(task_record["result"]) if task_record.get("result") is not None else None,
+                    task_record.get("error"),
                     task_record["created_at"],
                     task_record["updated_at"],
-                    task_record["completed_at"],
+                    task_record.get("completed_at"),
                 ))
         except Exception as e:
             logger.error(f"保存任务失败: {e}")
@@ -372,7 +454,7 @@ class BackgroundTaskManager:
             return None
         
         try:
-            with self.db._get_connection() as conn:
+            with self.db._get_conn() as conn:
                 row = conn.execute(
                     "SELECT * FROM background_tasks WHERE task_id = ?",
                     (task_id,)
@@ -425,7 +507,7 @@ class BackgroundTaskManager:
         
         try:
             cutoff = (datetime.now() - timedelta(days=days)).isoformat()
-            with self.db._get_connection() as conn:
+            with self.db._get_conn() as conn:
                 conn.execute(
                     "DELETE FROM background_tasks WHERE created_at < ?",
                     (cutoff,)
