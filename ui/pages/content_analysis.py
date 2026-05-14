@@ -202,23 +202,17 @@ class ContentAnalysisPage(AnalysisPage):
                     use_container_width=True,
                 )
 
-                if batch_btn or st.session_state.get("content_analysis_task_id"):
+                if batch_btn:
                     self._handle_batch_analysis()
             else:
                 st.warning("请选择包含脚本内容的列")
         else:
-            task_id = st.session_state.get("content_analysis_task_id")
-            if task_id and st.session_state.get("content_df") is not None:
-                self._handle_batch_analysis()
-            elif not task_id:
-                st.session_state.content_df = None
-                st.session_state.content_field_mapping = None
+            st.session_state.content_df = None
+            st.session_state.content_field_mapping = None
 
     def _handle_batch_analysis(self):
-        import time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from utils.field_mapping import normalize_columns
-        from services.task_manager import get_task_manager, TaskType
-        from ui.components.task_monitor import check_and_resume_task, render_task_result
 
         if st.session_state.content_field_mapping is None:
             callout("请先完成字段映射", type="error")
@@ -257,56 +251,50 @@ class ContentAnalysisPage(AnalysisPage):
 
         total = len(scripts)
 
-        current_task_id = st.session_state.get("content_analysis_task_id")
-        if current_task_id:
-            task = check_and_resume_task(current_task_id)
-            if task:
-                status = task.get("status")
-                if status in ["completed", "failed", "cancelled"]:
-                    render_task_result(task)
-                    if status == "completed" and task.get("result"):
-                        self._show_batch_results(task["result"])
-                    st.session_state.content_analysis_task_id = None
-                    st.session_state.content_df = None
-                    st.session_state.content_field_mapping = None
-                    return
-                elif status in ("running", "pending"):
-                    progress = task.get("progress", 0)
-                    current = task.get("current", 0)
-                    status_label = "准备中" if status == "pending" else "进行中"
-                    st.info(f"⏳ 任务{status_label}... {current}/{total} ({progress}%)")
-                    st.progress(progress / 100 if progress > 0 else 0.01,
-                                text=f"分析中 {current}/{total}")
-                    time.sleep(2)
-                    st.rerun()
-                    return
+        st.warning("⚠️ **分析中，请勿切换页面**，完成后将自动显示结果。")
+        st.info(f"共 {total} 条脚本，并发处理中...")
+
+        progress_bar = st.progress(0, text=f"准备分析 {total} 条脚本...")
+        status_text = st.empty()
 
         orchestrator = self._get_orchestrator()
-        task_manager = get_task_manager(
-            orchestrator.db,
-            model=orchestrator.llm.model,
-            api_key=orchestrator.llm.api_key
-        )
 
-        task_data = {
-            "scripts": scripts,
+        results = [None] * total
+        completed = 0
+
+        max_workers = min(3, total)
+
+        def analyze_one(index: int, script: dict):
+            try:
+                result = orchestrator.content_analyzer.analyze(script)
+                orchestrator.db.save_content_analysis(result)
+                return index, {"success": True, "data": result}
+            except Exception as e:
+                logger.error(f"内容分析失败 (item {index+1}/{total}): {e}")
+                return index, {"success": False, "error": str(e)}
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(analyze_one, i, scripts[i]): i
+                for i in range(total)
+            }
+            for future in as_completed(futures):
+                idx, result = future.result()
+                results[idx] = result
+                completed += 1
+                pct = int(completed / total * 100)
+                progress_bar.progress(
+                    pct / 100,
+                    text=f"分析中 {completed}/{total} ({pct}%)"
+                )
+                status_text.info(f"⏳ 已完成 {completed}/{total} 条")
+
+        state = {
+            "results": results,
             "total": total,
         }
 
-        task_id = task_manager.submit_task(
-            task_type=TaskType.CONTENT_ANALYSIS,
-            task_data=task_data,
-        )
-
-        st.session_state.content_analysis_task_id = task_id
-
-        st.success(f"✅ 任务已提交到后台执行！")
-        st.info(f"📋 任务ID: {task_id[:8]}... | 共 {total} 条脚本")
-        st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。返回此页面可查看进度。")
-
-        st.progress(0, text=f"准备分析 {total} 条脚本...")
-        time.sleep(2)
-        st.rerun()
+        self._show_batch_results(state)
 
     def _show_batch_results(self, state: dict):
         results = state.get("results", [])

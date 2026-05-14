@@ -164,66 +164,127 @@ class MatchCenterPage(MatchPage):
                     st.info("请检查内容分析和线索分析是否都已完成。")
 
     def _render_batch_match(self):
-        import time
         st.subheader("批量匹配所有内容与线索")
 
         top_k = st.slider("每个线索返回的匹配数量", 1, 10, 3)
 
-        current_task_id = st.session_state.get("batch_match_task_id")
-        if current_task_id:
-            from ui.components.task_monitor import check_and_resume_task
-            task = check_and_resume_task(current_task_id)
-            if task:
-                status = task.get("status")
-                if status == "completed":
-                    st.success("✅ 批量匹配已完成！")
-                    st.session_state.batch_match_task_id = None
-                    result = task.get("result", {})
-                    if result:
-                        self._render_batch_match_results(result.get("results", []))
-                    return
-                elif status == "failed":
-                    st.error(f"❌ 批量匹配失败: {task.get('error', '未知错误')}")
-                    st.session_state.batch_match_task_id = None
-                    return
-                elif status in ("running", "pending"):
-                    progress = task.get("progress", 0)
-                    status_label = "准备中" if status == "pending" else "进行中"
-                    st.info(f"⏳ 匹配任务{status_label}... ({progress}%)")
-                    st.progress(progress / 100 if progress > 0 else 0.01,
-                                text=f"匹配中... {progress}%")
-                    time.sleep(2)
-                    st.rerun()
-                    return
-
         if st.button("开始批量匹配", type="primary", use_container_width=True):
-            from services.task_manager import get_task_manager, TaskType
-            
             orchestrator = self._get_orchestrator()
-            task_manager = get_task_manager(
-                orchestrator.db,
-                model=orchestrator.llm.model,
-                api_key=orchestrator.llm.api_key
-            )
-            
-            task_data = {
-                "top_k": top_k,
-            }
-            
-            task_id = task_manager.submit_task(
-                task_type=TaskType.BATCH_MATCH,
-                task_data=task_data,
-            )
-            
-            st.session_state.batch_match_task_id = task_id
-            
-            st.success(f"✅ 批量匹配任务已提交！")
-            st.info(f"📋 任务ID: {task_id[:8]}...")
-            st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。")
-            
-            st.progress(0, text="准备批量匹配...")
-            time.sleep(2)
-            st.rerun()
+
+            contents = orchestrator.db.get_all_content_analyses(limit=500)
+            leads = orchestrator.db.get_all_lead_analyses(limit=500)
+
+            if not contents:
+                callout("未找到内容分析记录，请先进行内容分析", type="warning")
+                return
+            if not leads:
+                callout("未找到线索分析记录，请先进行线索分析", type="warning")
+                return
+
+            total_leads = len(leads)
+            st.warning("⚠️ **匹配中，请勿切换页面**，完成后将自动显示结果。")
+            st.info(f"共 {total_leads} 条线索，并发匹配中...")
+
+            progress_bar = st.progress(0, text=f"准备匹配 {total_leads} 条线索...")
+            status_text = st.empty()
+
+            content_list = [
+                {"analysis": c["analysis_json"], "content_id": c["id"]} for c in contents
+            ]
+            lead_list = [
+                {
+                    "profile": lead["profile_json"],
+                    "lead_id": lead["id"],
+                    "raw_data": lead.get("raw_data_json", {}),
+                }
+                for lead in leads
+            ]
+
+            results = []
+            match_results_to_save = []
+            completed = 0
+            max_workers = min(3, total_leads)
+
+            def match_one_lead(index: int, lead_data_item: dict):
+                try:
+                    lead_id = lead_data_item["lead_id"]
+                    matches = []
+                    for content_item in content_list:
+                        try:
+                            match_result = orchestrator.match_engine.match(
+                                content_item["analysis"],
+                                lead_data_item["profile"],
+                                content_id=content_item.get("content_id"),
+                                lead_id=lead_id,
+                            )
+                            matches.append({
+                                "content_id": content_item.get("content_id"),
+                                "content_snapshot": match_result.get("content_snapshot", {}),
+                                "match_result": match_result.get("match_result", {}),
+                            })
+                        except Exception as e:
+                            logger.error(f"单条匹配失败 lead={lead_id}: {e}")
+
+                    matches.sort(
+                        key=lambda m: m.get("match_result", {}).get("overall_score", 0),
+                        reverse=True,
+                    )
+                    top_matches = matches[:top_k]
+
+                    lead_data = orchestrator.db.get_lead_analysis(lead_id)
+                    lead_snapshot = orchestrator._build_lead_snapshot(
+                        lead_data or {"profile_json": lead_data_item["profile"], "raw_data_json": lead_data_item.get("raw_data", {})}
+                    )
+
+                    result_item = {
+                        "lead_id": lead_id,
+                        "lead_snapshot": lead_snapshot,
+                        "top_matches": top_matches,
+                    }
+
+                    matches_to_save = []
+                    for match in top_matches:
+                        if "error" not in match:
+                            import uuid
+                            match["match_id"] = str(uuid.uuid4())
+                            match.setdefault("content_snapshot", {})["content_id"] = match.get("content_id", "")
+                            match.setdefault("lead_snapshot", {})["lead_id"] = lead_id
+                            matches_to_save.append(match)
+
+                    return index, result_item, matches_to_save, None
+                except Exception as e:
+                    logger.error(f"匹配任务失败 (lead {index+1}/{total_leads}): {e}")
+                    return index, None, [], str(e)
+
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            results = [None] * total_leads
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(match_one_lead, i, lead_list[i]): i
+                    for i in range(total_leads)
+                }
+                for future in as_completed(futures):
+                    idx, result_item, to_save, error = future.result()
+                    results[idx] = result_item
+                    if result_item:
+                        match_results_to_save.extend(to_save)
+                    completed += 1
+                    pct = int(completed / total_leads * 100)
+                    progress_bar.progress(
+                        pct / 100,
+                        text=f"匹配中 {completed}/{total_leads} ({pct}%)"
+                    )
+                    status_text.info(f"⏳ 已完成 {completed}/{total_leads} 条")
+
+            if match_results_to_save:
+                try:
+                    orchestrator.db.save_match_results_batch(match_results_to_save)
+                except Exception as e:
+                    logger.error(f"批量保存匹配结果失败: {e}")
+
+            valid_results = [r for r in results if r is not None]
+            self._render_batch_match_results(valid_results)
 
     def _render_batch_match_results(self, results):
         """渲染批量匹配结果"""
