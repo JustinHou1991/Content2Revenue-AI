@@ -4,6 +4,10 @@
 Content2Revenue AI - PostgreSQL数据库模型
 基于SQLAlchemy 2.0的ORM模型定义
 
+注意：此文件使用 PostgreSQL 方言（UUID、JSONB、枚举类型），适用于生产环境部署。
+当前项目默认使用 SQLite 作为数据库后端（通过 services/database.py），此 ORM 模型层
+用于配合 SQLAlchemy + PostgreSQL 的迁移路径。
+
 作者: AI Assistant
 创建日期: 2026-05-10
 版本: 1.0.0

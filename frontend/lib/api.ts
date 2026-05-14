@@ -5,11 +5,40 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
+
+function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+}
+
+function setAccessToken(token: string) {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem('access_token', token);
+}
+
+function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token');
+}
+
+function setRefreshToken(token: string) {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem('refresh_token', token);
+}
+
+function clearTokens() {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('refresh_token');
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+}
 
 // 请求拦截器 - 添加Token
 api.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -24,7 +53,7 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+      const refreshToken = getRefreshToken();
 
       if (refreshToken) {
         try {
@@ -32,18 +61,14 @@ api.interceptors.response.use(
             refresh_token: refreshToken,
           });
 
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('access_token', data.access_token);
-            localStorage.setItem('refresh_token', data.refresh_token);
-          }
+          setAccessToken(data.access_token);
+          setRefreshToken(data.refresh_token);
 
           originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
           return api(originalRequest);
         } catch (refreshError) {
-          // 刷新失败，清除token并跳转登录
+          clearTokens();
           if (typeof window !== 'undefined') {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
             window.location.href = '/login';
           }
         }

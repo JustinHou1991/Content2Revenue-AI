@@ -9,30 +9,25 @@ from services.task_manager import get_task_manager, TaskStatus
 
 
 def render_task_monitor():
-    """在侧边栏渲染任务监控"""
     
-    # 获取任务管理器
     task_manager = get_task_manager()
     
-    # 获取进行中的任务
     running_tasks = task_manager.get_running_tasks()
     
     if not running_tasks:
         return
     
-    # 显示任务状态
     with st.sidebar:
         st.divider()
         st.markdown("### 🔄 后台任务")
         
-        for task in running_tasks[:3]:  # 最多显示3个
+        for task in running_tasks[:3]:
             task_id = task.get("task_id", "")[:8]
             task_type = task.get("task_type", "未知")
             progress = task.get("progress", 0)
             current = task.get("current", 0)
             total = task.get("total", 0)
             
-            # 任务类型中文名
             type_names = {
                 "content_analysis": "内容分析",
                 "lead_analysis": "线索分析",
@@ -41,15 +36,10 @@ def render_task_monitor():
             }
             type_name = type_names.get(task_type, task_type)
             
-            # 显示进度
             st.progress(progress / 100, text=f"{type_name}: {current}/{total}")
         
         if len(running_tasks) > 3:
             st.caption(f"还有 {len(running_tasks) - 3} 个任务进行中...")
-        
-        # 刷新按钮
-        if st.button("🔄 刷新状态", key="refresh_tasks", use_container_width=True):
-            st.rerun()
 
 
 def check_and_resume_task(task_id: str) -> Optional[Dict[str, Any]]:

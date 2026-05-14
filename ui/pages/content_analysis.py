@@ -89,7 +89,6 @@ class ContentAnalysisPage(AnalysisPage):
                     st.info("请检查API Key是否有效，或稍后重试。")
 
     def _render_batch_input(self):
-        """渲染批量导入界面（支持 CSV/Excel/Word/PDF）"""
         st.subheader("批量导入脚本")
 
         uploaded_file = st.file_uploader(
@@ -98,7 +97,6 @@ class ContentAnalysisPage(AnalysisPage):
             key="content_batch_file"
         )
 
-        # 字段映射状态管理
         if "content_field_mapping" not in st.session_state:
             st.session_state.content_field_mapping = None
         if "content_df" not in st.session_state:
@@ -116,7 +114,6 @@ class ContentAnalysisPage(AnalysisPage):
                 validate_mapping_for_analysis,
             )
 
-            # 读取文件并显示字段映射
             if st.session_state.content_df is None:
                 import io
                 file_type = uploaded_file.name.lower().split(".")[-1]
@@ -128,11 +125,9 @@ class ContentAnalysisPage(AnalysisPage):
                 elif file_type in ["docx", "doc"]:
                     st.session_state.content_df = self._parse_word(uploaded_file)
                 else:
-                    # CSV文件：先将内容读入内存，再用BytesIO解析
                     file_bytes = uploaded_file.getvalue()
                     csv_file = io.BytesIO(file_bytes)
 
-                    # 尝试多种编码和分隔符读取CSV
                     success = False
                     for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
                         if success:
@@ -158,12 +153,10 @@ class ContentAnalysisPage(AnalysisPage):
                 callout("文件解析失败或无有效内容", type="error")
                 return
 
-            # ===== 简化的字段映射：只需选择"脚本内容"列 =====
             st.markdown("---")
             st.subheader("📋 选择脚本内容列")
             st.caption("系统需要知道哪一列包含脚本/文案内容")
 
-            # 自动检测最可能的"脚本内容"列
             from utils.field_mapping import REVERSE_MAPPING
             auto_col = None
             for col in df.columns:
@@ -178,7 +171,6 @@ class ContentAnalysisPage(AnalysisPage):
                 if auto_col:
                     break
 
-            # 如果没找到，选第一个文本内容较长的列
             if auto_col is None:
                 for col in df.columns:
                     if df[col].dtype == "object" and df[col].notna().any():
@@ -210,16 +202,20 @@ class ContentAnalysisPage(AnalysisPage):
                     use_container_width=True,
                 )
 
-                if batch_btn or st.session_state.get("batch_state", {}).get("running"):
+                if batch_btn:
                     self._handle_batch_analysis()
             else:
                 st.warning("请选择包含脚本内容的列")
         else:
-            st.session_state.content_df = None
-            st.session_state.content_field_mapping = None
+            task_id = st.session_state.get("content_analysis_task_id")
+            if task_id and st.session_state.get("content_df") is not None:
+                self._handle_batch_analysis()
+            elif not task_id:
+                st.session_state.content_df = None
+                st.session_state.content_field_mapping = None
 
     def _handle_batch_analysis(self):
-        """处理批量分析逻辑（使用后台任务，支持页面切换不中断）"""
+        import time
         from utils.field_mapping import normalize_columns
         from services.task_manager import get_task_manager, TaskType
         from ui.components.task_monitor import check_and_resume_task, render_task_result
@@ -231,26 +227,21 @@ class ContentAnalysisPage(AnalysisPage):
         mapping = st.session_state.content_field_mapping
         df = st.session_state.content_df
 
-        # 检查必需的脚本内容字段
         if "脚本内容" not in mapping:
             callout("缺少必需的'脚本内容'字段映射", type="error")
             return
 
-        # 标准化列名
         df_normalized = normalize_columns(df, {k: v for k, v in mapping.items()})
 
-        # 准备脚本数据（过滤空值、短文本、重复内容）
         scripts = []
         seen_texts = set()
         for idx, row in df_normalized.iterrows():
             script_text = str(row.get("脚本内容", ""))
-            # 过滤无效内容
             if (not script_text
                     or not script_text.strip()
                     or script_text.lower() in ["nan", "none", ""]
                     or len(script_text.strip()) < 10):
                 continue
-            # 过滤重复内容
             text_key = script_text.strip()[:50]
             if text_key in seen_texts:
                 continue
@@ -266,28 +257,35 @@ class ContentAnalysisPage(AnalysisPage):
 
         total = len(scripts)
 
-        # 检查是否有进行中的任务
         current_task_id = st.session_state.get("content_analysis_task_id")
         if current_task_id:
             task = check_and_resume_task(current_task_id)
             if task:
                 status = task.get("status")
                 if status in ["completed", "failed", "cancelled"]:
-                    # 任务已完成，显示结果
                     render_task_result(task)
+                    if status == "completed" and task.get("result"):
+                        self._show_batch_results(task["result"])
                     st.session_state.content_analysis_task_id = None
-                    # 清理上传的数据
                     st.session_state.content_df = None
                     st.session_state.content_field_mapping = None
                     return
                 elif status == "running":
-                    # 任务仍在运行，添加刷新按钮
-                    if st.button("🔄 刷新进度", type="primary", key="refresh_content"):
-                        st.rerun()
+                    progress = task.get("progress", 0)
+                    current = task.get("current", 0)
+                    st.info(f"⏳ 任务进行中... {current}/{total} ({progress}%)")
+                    st.progress(progress / 100 if progress > 0 else 0.01,
+                                text=f"分析中 {current}/{total}")
+                    time.sleep(2)
+                    st.rerun()
                     return
 
-        # 提交后台任务
-        task_manager = get_task_manager(self._get_orchestrator().db)
+        orchestrator = self._get_orchestrator()
+        task_manager = get_task_manager(
+            orchestrator.db,
+            model=orchestrator.llm.model,
+            api_key=orchestrator.llm.api_key
+        )
 
         task_data = {
             "scripts": scripts,
@@ -302,24 +300,19 @@ class ContentAnalysisPage(AnalysisPage):
         st.session_state.content_analysis_task_id = task_id
 
         st.success(f"✅ 任务已提交到后台执行！")
-        st.info(f"📋 任务ID: {task_id[:8]}...")
+        st.info(f"📋 任务ID: {task_id[:8]}... | 共 {total} 条脚本")
         st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。返回此页面可查看进度。")
 
-        # 显示初始进度
         st.progress(0, text=f"准备分析 {total} 条脚本...")
-
-        # 添加刷新按钮
-        if st.button("🔄 刷新进度", type="primary", key="refresh_content"):
-            st.rerun()
+        time.sleep(2)
+        st.rerun()
 
     def _show_batch_results(self, state: dict):
-        """展示批量分析结果"""
-        results = state["results"]
-        total = state["total"]
+        results = state.get("results", [])
+        total = state.get("total", len(results))
         success_count = sum(1 for r in results if r.get("success"))
         fail_count = sum(1 for r in results if not r.get("success"))
 
-        # 验证数据库实际保存数量
         try:
             db_count = len(self._get_orchestrator().db.get_all_content_analyses())
         except Exception:
@@ -332,22 +325,23 @@ class ContentAnalysisPage(AnalysisPage):
             msg += f" | 数据库共 {db_count} 条记录"
         callout(msg, type="success", icon="&#10003;")
 
-        # 展示结果
         divider()
         st.subheader("分析结果")
 
-        for r in results:
+        for i, r in enumerate(results):
             if r.get("success"):
-                cid = r["data"].get("content_id", "")[:8]
+                data = r.get("data", {})
+                analysis = data.get("analysis", data)
+                cid = data.get("content_id", "")[:8]
+                score = analysis.get("content_score", "N/A")
                 with st.expander(
-                    f"#{r['index']+1} [{cid}] - 评分 {r['data']['analysis'].get('content_score', 'N/A')}/10"
+                    f"#{i+1} [{cid}] - 评分 {score}/10"
                 ):
-                    self._display_analysis(r["data"]["analysis"])
+                    self._display_analysis(analysis)
             else:
-                with st.expander(f"脚本 #{r['index']+1} - 分析失败"):
+                with st.expander(f"脚本 #{i+1} - 分析失败"):
                     st.error(r.get("error", "未知错误"))
 
-        # 清理状态
         st.session_state.content_df = None
         st.session_state.content_field_mapping = None
         if "batch_state" in st.session_state:

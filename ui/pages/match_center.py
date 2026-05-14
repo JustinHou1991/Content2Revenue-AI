@@ -164,12 +164,11 @@ class MatchCenterPage(MatchPage):
                     st.info("请检查内容分析和线索分析是否都已完成。")
 
     def _render_batch_match(self):
-        """批量匹配"""
+        import time
         st.subheader("批量匹配所有内容与线索")
 
         top_k = st.slider("每个线索返回的匹配数量", 1, 10, 3)
 
-        # 检查是否有进行中的任务
         current_task_id = st.session_state.get("batch_match_task_id")
         if current_task_id:
             from ui.components.task_monitor import check_and_resume_task
@@ -179,7 +178,6 @@ class MatchCenterPage(MatchPage):
                 if status == "completed":
                     st.success("✅ 批量匹配已完成！")
                     st.session_state.batch_match_task_id = None
-                    # 显示结果
                     result = task.get("result", {})
                     if result:
                         self._render_batch_match_results(result.get("results", []))
@@ -189,15 +187,23 @@ class MatchCenterPage(MatchPage):
                     st.session_state.batch_match_task_id = None
                     return
                 elif status == "running":
-                    if st.button("🔄 刷新进度", type="primary"):
-                        st.rerun()
+                    progress = task.get("progress", 0)
+                    st.info(f"⏳ 匹配任务进行中... ({progress}%)")
+                    st.progress(progress / 100 if progress > 0 else 0.01,
+                                text=f"匹配中... {progress}%")
+                    time.sleep(2)
+                    st.rerun()
                     return
 
         if st.button("开始批量匹配", type="primary", use_container_width=True):
-            # 提交后台任务
             from services.task_manager import get_task_manager, TaskType
             
-            task_manager = get_task_manager(self._get_orchestrator().db)
+            orchestrator = self._get_orchestrator()
+            task_manager = get_task_manager(
+                orchestrator.db,
+                model=orchestrator.llm.model,
+                api_key=orchestrator.llm.api_key
+            )
             
             task_data = {
                 "top_k": top_k,
@@ -215,9 +221,8 @@ class MatchCenterPage(MatchPage):
             st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。")
             
             st.progress(0, text="准备批量匹配...")
-            
-            if st.button("🔄 刷新进度", type="primary"):
-                st.rerun()
+            time.sleep(2)
+            st.rerun()
 
     def _render_batch_match_results(self, results):
         """渲染批量匹配结果"""

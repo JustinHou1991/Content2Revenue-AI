@@ -25,12 +25,14 @@ import jwt
 import bcrypt
 import uuid
 import logging
+import sqlite3
+import json
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
 import threading
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -126,17 +128,78 @@ class AuthManager:
         payload = auth.verify_token(tokens.access_token)
     """
     
-    def __init__(self, config: AuthConfig, db_path: str = None):
-        self.config = config
-        self.db_path = db_path
-        self._users: Dict[str, User] = {}  # email -> User
-        self._users_by_id: Dict[str, User] = {}  # id -> User
+    def __init__(self, config: Optional[AuthConfig] = None, db_path: str = ""):
+        self.config = config or AuthConfig()
+        self._users: Dict[str, User] = {}
+        self._users_by_id: Dict[str, User] = {}
         self._token_blacklist: set = set()
-        self._login_attempts: Dict[str, List[datetime]] = {}  # email -> 尝试时间列表
+        self._login_attempts: Dict[str, List[datetime]] = {}
         self._lock = threading.RLock()
-        
-        # 创建默认管理员
+        self._db_path = db_path or os.path.join(os.path.dirname(__file__), "..", "data", "auth.db")
+
+        self._init_db()
+        self._load_users()
         self._create_default_admin()
+
+    def _init_db(self):
+        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS auth_users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT DEFAULT 'user',
+                    status TEXT DEFAULT 'active',
+                    tenant_id TEXT,
+                    created_at TEXT,
+                    updated_at TEXT,
+                    last_login TEXT,
+                    metadata TEXT DEFAULT '{}'
+                )
+            """)
+            conn.commit()
+
+    def _load_users(self):
+        try:
+            with sqlite3.connect(self._db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("SELECT * FROM auth_users WHERE status != 'deleted'").fetchall()
+                for row in rows:
+                    user = User(
+                        id=row["id"],
+                        email=row["email"],
+                        password_hash=row["password_hash"],
+                        role=UserRole(row["role"]) if row["role"] else UserRole.USER,
+                        status=UserStatus(row["status"]) if row["status"] else UserStatus.ACTIVE,
+                        tenant_id=row.get("tenant_id"),
+                        created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.utcnow(),
+                        updated_at=datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else datetime.utcnow(),
+                        last_login=datetime.fromisoformat(row["last_login"]) if row["last_login"] else None,
+                        metadata=json.loads(row["metadata"]) if row["metadata"] else {}
+                    )
+                    self._users[user.email] = user
+                    self._users_by_id[user.id] = user
+        except Exception as e:
+            logger.warning(f"加载用户数据失败: {e}")
+
+    def _save_user(self, user: User):
+        try:
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute(
+                    """INSERT OR REPLACE INTO auth_users 
+                       (id, email, password_hash, role, status, tenant_id, created_at, updated_at, last_login, metadata)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (user.id, user.email, user.password_hash, user.role.value,
+                     user.status.value, user.tenant_id,
+                     user.created_at.isoformat() if user.created_at else None,
+                     user.updated_at.isoformat() if user.updated_at else None,
+                     user.last_login.isoformat() if user.last_login else None,
+                     json.dumps(user.metadata) if user.metadata else "{}")
+                )
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"保存用户数据失败: {e}")
     
     def _create_default_admin(self):
         """创建默认管理员账户"""
@@ -240,6 +303,7 @@ class AuthManager:
             
             self._users[email] = user
             self._users_by_id[user.id] = user
+            self._save_user(user)
             
             logger.info(f"用户注册成功: {email} (ID: {user.id})")
             return user
@@ -279,6 +343,7 @@ class AuthManager:
             
             # 更新最后登录时间
             user.last_login = datetime.now()
+            self._save_user(user)
             
             # 创建令牌
             access_token = self._create_token(user, "access")
@@ -410,6 +475,7 @@ class AuthManager:
             
             user.password_hash = self._hash_password(new_password)
             user.updated_at = datetime.now()
+            self._save_user(user)
             
             logger.info(f"密码修改成功: {user.email}")
     
@@ -442,6 +508,7 @@ class AuthManager:
             
             user.status = status
             user.updated_at = datetime.now()
+            self._save_user(user)
             
             logger.info(f"用户状态更新: {user.email} -> {status.value}")
     
@@ -454,6 +521,7 @@ class AuthManager:
             
             user.status = UserStatus.DELETED
             user.updated_at = datetime.now()
+            self._save_user(user)
             
             logger.info(f"用户已删除: {user.email}")
     
@@ -484,7 +552,7 @@ class AuthManager:
 
 
 # 便捷函数
-def create_auth_manager(secret_key: str = None, **kwargs) -> AuthManager:
+def create_auth_manager(secret_key: str = None, db_path: str = "", **kwargs) -> AuthManager:
     """创建认证管理器实例"""
     if secret_key is None:
         # 生成随机密钥（仅用于开发）
@@ -493,4 +561,4 @@ def create_auth_manager(secret_key: str = None, **kwargs) -> AuthManager:
         logger.warning("使用随机生成的密钥，生产环境请配置固定密钥")
     
     config = AuthConfig(secret_key=secret_key, **kwargs)
-    return AuthManager(config)
+    return AuthManager(config, db_path=db_path)

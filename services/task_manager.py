@@ -49,18 +49,24 @@ class BackgroundTaskManager:
                     cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self, db: Database = None):
-        if self._initialized:
-            return
-        
-        self.db = db
-        self._executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="bg_task_")
-        self._running_tasks: Dict[str, Future] = {}
-        self._task_callbacks: Dict[str, List[Callable]] = {}
-        self._lock = threading.Lock()
-        
-        self._initialized = True
-        logger.info("后台任务管理器初始化完成")
+    def __init__(self, db: Database = None, model: str = "deepseek-chat", api_key: str = ""):
+        if not self._initialized:
+            self.db = db
+            self.model = model
+            self.api_key = api_key
+            self._executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="bg_task_")
+            self._running_tasks: Dict[str, Future] = {}
+            self._task_callbacks: Dict[str, List[Callable]] = {}
+            self._lock = threading.Lock()
+            
+            self._initialized = True
+            logger.info("后台任务管理器初始化完成 (model=%s)", model)
+        else:
+            if db is not None and self.db is None:
+                self.db = db
+            if model != "deepseek-chat" or self.model == "deepseek-chat":
+                self.model = model
+                self.api_key = api_key
     
     def submit_task(
         self,
@@ -152,13 +158,14 @@ class BackgroundTaskManager:
                     del self._running_tasks[task_id]
     
     def _execute_content_analysis(self, task_id: str, task_data: Dict[str, Any]) -> Dict:
-        """执行内容分析任务"""
         from services.orchestrator import Orchestrator
         
-        orchestrator = Orchestrator()
+        orchestrator = Orchestrator(model=self.model, api_key=self.api_key)
         scripts = task_data.get("scripts", [])
         total = len(scripts)
         results = []
+        
+        self._update_task_progress(task_id, 0, total, 0)
         
         for i, script in enumerate(scripts):
             try:
@@ -166,9 +173,9 @@ class BackgroundTaskManager:
                 orchestrator.db.save_content_analysis(result)
                 results.append({"success": True, "data": result})
             except Exception as e:
+                logger.error(f"内容分析失败 (item {i+1}/{total}): {e}")
                 results.append({"success": False, "error": str(e)})
             
-            # 更新进度
             progress = int((i + 1) / total * 100)
             self._update_task_progress(task_id, i + 1, total, progress)
         
@@ -180,13 +187,14 @@ class BackgroundTaskManager:
         }
     
     def _execute_lead_analysis(self, task_id: str, task_data: Dict[str, Any]) -> Dict:
-        """执行线索分析任务"""
         from services.orchestrator import Orchestrator
         
-        orchestrator = Orchestrator()
+        orchestrator = Orchestrator(model=self.model, api_key=self.api_key)
         leads = task_data.get("leads", [])
         total = len(leads)
         results = []
+        
+        self._update_task_progress(task_id, 0, total, 0)
         
         for i, lead in enumerate(leads):
             try:
@@ -197,9 +205,9 @@ class BackgroundTaskManager:
                 orchestrator.db.save_lead_analysis(result)
                 results.append({"success": True, "data": result})
             except Exception as e:
+                logger.error(f"线索分析失败 (item {i+1}/{total}): {e}")
                 results.append({"success": False, "error": str(e)})
             
-            # 更新进度
             progress = int((i + 1) / total * 100)
             self._update_task_progress(task_id, i + 1, total, progress)
         
@@ -211,14 +219,12 @@ class BackgroundTaskManager:
         }
     
     def _execute_batch_match(self, task_id: str, task_data: Dict[str, Any]) -> Dict:
-        """执行批量匹配任务"""
         from services.orchestrator import Orchestrator
         
-        orchestrator = Orchestrator()
-        content_ids = task_data.get("content_ids", [])
-        lead_ids = task_data.get("lead_ids", [])
+        orchestrator = Orchestrator(model=self.model, api_key=self.api_key)
+        top_k = task_data.get("top_k", 3)
         
-        results = orchestrator.batch_match(content_ids, lead_ids)
+        results = orchestrator.batch_match(top_k=top_k)
         
         self._update_task_progress(task_id, len(results), len(results), 100)
         
@@ -228,10 +234,9 @@ class BackgroundTaskManager:
         }
     
     def _execute_single_match(self, task_id: str, task_data: Dict[str, Any]) -> Dict:
-        """执行单对匹配任务"""
         from services.orchestrator import Orchestrator
         
-        orchestrator = Orchestrator()
+        orchestrator = Orchestrator(model=self.model, api_key=self.api_key)
         content_id = task_data.get("content_id")
         lead_id = task_data.get("lead_id")
         
@@ -431,6 +436,5 @@ class BackgroundTaskManager:
 
 
 # 便捷函数
-def get_task_manager(db: Database = None) -> BackgroundTaskManager:
-    """获取任务管理器实例"""
-    return BackgroundTaskManager(db)
+def get_task_manager(db: Database = None, model: str = "deepseek-chat", api_key: str = "") -> BackgroundTaskManager:
+    return BackgroundTaskManager(db, model=model, api_key=api_key)

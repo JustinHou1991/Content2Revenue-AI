@@ -37,8 +37,18 @@ API_VERSION = "v1"
 API_PREFIX = f"/api/{API_VERSION}"
 
 # 初始化核心组件
+_jwt_secret = os.getenv("JWT_SECRET_KEY")
+if not _jwt_secret:
+    import secrets
+    _jwt_secret = secrets.token_urlsafe(32)
+    import logging
+    logging.getLogger(__name__).warning(
+        "未设置 JWT_SECRET_KEY 环境变量，使用随机密钥。"
+        "生产环境必须设置 JWT_SECRET_KEY 以保持会话持久性。"
+    )
+
 auth_config = AuthConfig(
-    secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production"),
+    secret_key=_jwt_secret,
     access_token_expire_minutes=30,
     refresh_token_expire_days=7
 )
@@ -110,7 +120,7 @@ class ErrorResponse(BaseModel):
 
 class TenantCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    slug: str = Field(..., regex=r"^[a-z0-9-]+$", description="租户标识")
+    slug: str = Field(..., pattern=r"^[a-z0-9-]+$", description="租户标识")
     plan: TenantPlan = TenantPlan.FREE
 
 class TenantResponse(BaseModel):
@@ -145,18 +155,20 @@ app = FastAPI(
 # ==================== 中间件 ====================
 
 # CORS配置
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8501").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 # 可信主机
+_allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=os.getenv("ALLOWED_HOSTS", "*").split(",")
+    allowed_hosts=_allowed_hosts
 )
 
 # 请求日志中间件

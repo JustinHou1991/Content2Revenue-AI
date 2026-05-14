@@ -62,7 +62,6 @@ class LeadAnalysisPage(AnalysisPage):
                     st.info("请检查API Key是否有效，或稍后重试。")
 
     def _render_batch_input(self):
-        """渲染批量导入界面（支持 CSV/Excel/Word/PDF）"""
         st.subheader("批量导入线索")
 
         uploaded_file = st.file_uploader(
@@ -71,7 +70,6 @@ class LeadAnalysisPage(AnalysisPage):
             key="lead_batch_file"
         )
 
-        # 字段映射状态管理
         if "lead_field_mapping" not in st.session_state:
             st.session_state.lead_field_mapping = None
         if "lead_df" not in st.session_state:
@@ -88,7 +86,6 @@ class LeadAnalysisPage(AnalysisPage):
                 validate_mapping_for_analysis,
             )
 
-            # 读取文件并显示字段映射
             if st.session_state.lead_df is None:
                 import io
                 import csv
@@ -101,11 +98,9 @@ class LeadAnalysisPage(AnalysisPage):
                 elif file_type in ["docx", "doc"]:
                     st.session_state.lead_df = self._parse_word(uploaded_file)
                 else:
-                    # CSV文件：先将内容读入内存，再用BytesIO解析
                     file_bytes = uploaded_file.getvalue()
                     csv_file = io.BytesIO(file_bytes)
 
-                    # 尝试多种编码和分隔符读取CSV
                     success = False
                     for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
                         if success:
@@ -114,7 +109,7 @@ class LeadAnalysisPage(AnalysisPage):
                             try:
                                 csv_file.seek(0)
                                 df = pd.read_csv(csv_file, encoding=encoding, sep=sep, engine="python", on_bad_lines="skip")
-                                if len(df.columns) > 1:  # 确保正确解析了多列
+                                if len(df.columns) > 1:
                                     st.session_state.lead_df = df
                                     success = True
                                     break
@@ -131,12 +126,10 @@ class LeadAnalysisPage(AnalysisPage):
                 callout("文件解析失败或无有效内容", type="error")
                 return
 
-            # ===== 简化的字段映射：只需选择"需求描述"列 =====
             st.markdown("---")
             st.subheader("📋 选择线索描述列")
             st.caption("系统需要知道哪一列包含线索的描述信息（如需求描述、对话记录等）")
 
-            # 自动检测最可能的"需求描述"列
             from utils.field_mapping import REVERSE_MAPPING
             auto_col = None
             for col in df.columns:
@@ -144,7 +137,6 @@ class LeadAnalysisPage(AnalysisPage):
                 if col_lower in REVERSE_MAPPING and REVERSE_MAPPING[col_lower] == "需求描述":
                     auto_col = col
                     break
-                # 模糊匹配
                 for keyword in ["需求", "描述", "对话", "记录", "内容", "备注", "说明"]:
                     if keyword in col_lower:
                         auto_col = col
@@ -152,19 +144,17 @@ class LeadAnalysisPage(AnalysisPage):
                 if auto_col:
                     break
 
-            # 如果没找到，尝试选择第一个文本列
             if auto_col is None:
                 for col in df.columns:
                     if df[col].dtype == "object" and df[col].notna().any():
                         sample = str(df[col].dropna().iloc[0]) if len(df[col].dropna()) > 0 else ""
-                        if len(sample) > 20:  # 选内容较长的列
+                        if len(sample) > 20:
                             auto_col = col
                             break
 
             col_options = ["-- 请选择 --"] + list(df.columns)
             default_idx = col_options.index(auto_col) if auto_col and auto_col in col_options else 0
 
-            # 主分析列（必需选择）
             selected_col = st.selectbox(
                 "📌 主分析列（必需）",
                 col_options,
@@ -172,7 +162,6 @@ class LeadAnalysisPage(AnalysisPage):
                 help="选择包含客户主要需求/留言内容的列，系统将以此列内容作为分析基础",
             )
 
-            # 参考列（可选多选）
             other_cols = [c for c in df.columns if c != selected_col and c != "-- 请选择 --"]
             reference_cols = st.multiselect(
                 "📋 参考列（可选）",
@@ -182,7 +171,6 @@ class LeadAnalysisPage(AnalysisPage):
             )
 
             if selected_col != "-- 请选择 --":
-                # 合并主列和参考列
                 all_selected_cols = [selected_col] + reference_cols
                 st.session_state.lead_field_mapping = {"需求描述": selected_col, "参考列": reference_cols}
                 
@@ -191,45 +179,44 @@ class LeadAnalysisPage(AnalysisPage):
                     cols_info += f" + {len(reference_cols)} 个参考列"
                 st.success(f"✅ 已设置分析列（共 {len(df)} 条记录）: {cols_info}")
 
-                # 预览数据，帮助用户确认选择正确
                 with st.expander("👁️ 预览数据内容"):
-                    # 显示主分析列前5条
                     st.write("**主分析列预览：**")
                     preview_data = df[selected_col].head(5).tolist()
                     for i, val in enumerate(preview_data, 1):
                         val_str = str(val)[:100] if val else "(空)"
                         st.write(f"{i}. {val_str}")
                     
-                    # 显示参考列前5条
                     if reference_cols:
                         st.write("**参考列预览：**")
-                        for ref_col in reference_cols[:3]:  # 最多显示3个参考列
+                        for ref_col in reference_cols[:3]:
                             ref_vals = df[ref_col].head(3).tolist()
                             st.write(f"- {ref_col}: {ref_vals}")
                     
-                    # 检查是否包含抖音系统消息
                     system_keywords = ["在抖音", "发起了", "输入了手机号"]
                     has_system_msg = any(any(kw in str(v) for kw in system_keywords) for v in preview_data if v)
                     if has_system_msg:
                         st.warning("⚠️ 检测到抖音系统消息，这些不是客户需求。如果主分析列选择错误，请重新选择包含客户留言的列。")
 
-                # 批量分析按钮
                 batch_btn = st.button(
                     f"🚀 开始批量分析（{len(df)} 条线索）",
                     type="primary",
                     use_container_width=True,
                 )
 
-                if batch_btn or st.session_state.get("lead_batch_state", {}).get("running"):
+                if batch_btn:
                     self._handle_batch_analysis()
             else:
                 st.warning("请选择包含线索描述的列")
         else:
-            st.session_state.lead_df = None
-            st.session_state.lead_field_mapping = None
+            task_id = st.session_state.get("lead_analysis_task_id")
+            if task_id and st.session_state.get("lead_df") is not None:
+                self._handle_batch_analysis()
+            elif not task_id:
+                st.session_state.lead_df = None
+                st.session_state.lead_field_mapping = None
 
     def _handle_batch_analysis(self):
-        """处理批量分析逻辑"""
+        import time
         import pandas as pd
 
         if st.session_state.lead_field_mapping is None:
@@ -239,25 +226,21 @@ class LeadAnalysisPage(AnalysisPage):
         mapping = st.session_state.lead_field_mapping
         df = st.session_state.lead_df.copy()
 
-        # 检查必需的需求描述字段
         if "需求描述" not in mapping:
             callout("缺少必需的'需求描述'字段映射", type="error")
             return
 
-        # 获取原始列名
-        desc_col = mapping.get("需求描述")  # 主分析列，如 "最新互动记录"
-        reference_cols = mapping.get("参考列", [])  # 参考列列表
+        desc_col = mapping.get("需求描述")
+        reference_cols = mapping.get("参考列", [])
 
         if not desc_col or desc_col not in df.columns:
             callout(f"主分析列不存在，请重新选择", type="error")
             return
 
-        # ---- 数据清洗步骤 ----
         st.subheader("数据清洗")
 
         df_before_total = len(df)
 
-        # 1. 将所有选择的列转为字符串并清理
         all_cols_to_clean = [desc_col] + reference_cols
         for col in all_cols_to_clean:
             if col in df.columns:
@@ -267,7 +250,6 @@ class LeadAnalysisPage(AnalysisPage):
                     ''
                 )
 
-        # 统计主列空值
         empty_mask = (
             (df[desc_col] == '') |
             (df[desc_col].str.lower().isin(['nan', 'none', 'null', '无', '-', '--', 'nat'])) |
@@ -275,7 +257,6 @@ class LeadAnalysisPage(AnalysisPage):
         )
         empty_count = empty_mask.sum()
 
-        # 删除主列为空的行
         df = df[~empty_mask].reset_index(drop=True)
 
         cleaned_rows = df_before_total - len(df)
@@ -285,18 +266,15 @@ class LeadAnalysisPage(AnalysisPage):
         else:
             st.info(f"数据清洗完成：共 {len(df)} 行数据，无需清洗")
 
-        # 显示清洗后的数据预览
         with st.expander("查看清洗后的数据"):
-            preview_cols = [desc_col] + reference_cols[:3]  # 主列 + 最多3个参考列
+            preview_cols = [desc_col] + reference_cols[:3]
             preview_cols = [c for c in preview_cols if c in df.columns]
             st.dataframe(df[preview_cols].head(10))
 
-        # ---- 提取线索数据 ----
         leads = []
         seen_texts = set()
         skip_reasons = {"empty": 0, "nan": 0, "duplicate": 0, "system_msg": 0}
         
-        # 抖音系统消息关键词（这些不是客户需求）
         system_keywords = [
             "在抖音私信输入了手机号",
             "在抖音企业主页发起了通话",
@@ -306,25 +284,20 @@ class LeadAnalysisPage(AnalysisPage):
         ]
         
         for idx, row in df.iterrows():
-            # 合并主列和参考列的内容作为完整线索
             conversation_parts = []
             
-            # 主分析列内容
             main_content = str(row.get(desc_col, "")).strip()
             if main_content and main_content.lower() not in ["nan", "none", "null", ""]:
                 conversation_parts.append(f"[{desc_col}] {main_content}")
             
-            # 参考列内容
             for ref_col in reference_cols:
                 if ref_col in df.columns:
                     ref_content = str(row.get(ref_col, "")).strip()
                     if ref_content and ref_content.lower() not in ["nan", "none", "null", ""]:
                         conversation_parts.append(f"[{ref_col}] {ref_content}")
             
-            # 合并所有内容
             conversation = " | ".join(conversation_parts)
             
-            # 检查为什么被跳过
             if not conversation or conversation.strip() == "":
                 skip_reasons["empty"] += 1
                 continue
@@ -332,21 +305,18 @@ class LeadAnalysisPage(AnalysisPage):
                 skip_reasons["nan"] += 1
                 continue
             
-            # 过滤抖音系统消息（仅检查主列）
             if main_content:
                 is_system_msg = any(keyword in main_content for keyword in system_keywords)
                 if is_system_msg:
                     skip_reasons["system_msg"] += 1
                     continue
 
-            # 过滤重复内容
             conv_key = main_content.strip()[:50] if main_content else conversation.strip()[:50]
             if conv_key in seen_texts:
                 skip_reasons["duplicate"] += 1
                 continue
             seen_texts.add(conv_key)
 
-            # 构建 lead_data，包含所有列的原始数据
             lead_data = {"conversation": conversation}
             for col_name in df.columns:
                 if col_name == desc_col:
@@ -360,7 +330,6 @@ class LeadAnalysisPage(AnalysisPage):
                 "lead_id": str(idx),
             })
         
-        # 显示跳过原因统计
         total_skipped = sum(skip_reasons.values())
         if total_skipped > 0:
             with st.expander("🔍 数据提取详情"):
@@ -371,7 +340,6 @@ class LeadAnalysisPage(AnalysisPage):
                 st.write(f"- 抖音系统消息: {skip_reasons['system_msg']} 行")
                 if skip_reasons['system_msg'] > 0:
                     st.info("💡 提示：大量数据被识别为抖音系统消息（如'在抖音私信输入了手机号'）。请检查是否选择了包含客户实际需求的列，而不是'最新互动记录'系统列。")
-                # 显示前5条被提取的线索
                 if leads:
                     st.write(f"---")
                     st.write(f"✅ 前5条被提取的线索:")
@@ -380,7 +348,6 @@ class LeadAnalysisPage(AnalysisPage):
                 else:
                     st.warning("⚠️ 没有提取到任何有效线索。请确认上传的文件中包含客户的实际需求描述（如留言、咨询内容），而不是系统操作记录。")
 
-        # 显示提取统计
         total_rows = len(df)
         extracted_count = len(leads)
         skipped_count = total_rows - extracted_count
@@ -393,7 +360,6 @@ class LeadAnalysisPage(AnalysisPage):
 
         total = len(leads)
 
-        # 检查是否有进行中的任务
         current_task_id = st.session_state.get("lead_analysis_task_id")
         if current_task_id:
             from ui.components.task_monitor import check_and_resume_task, render_task_result
@@ -401,21 +367,32 @@ class LeadAnalysisPage(AnalysisPage):
             if task:
                 status = task.get("status")
                 if status in ["completed", "failed", "cancelled"]:
-                    # 任务已完成，显示结果
                     render_task_result(task)
+                    if status == "completed" and task.get("result"):
+                        self._show_lead_batch_results(task["result"])
                     st.session_state.lead_analysis_task_id = None
+                    st.session_state.lead_df = None
+                    st.session_state.lead_field_mapping = None
                     return
                 elif status == "running":
-                    # 任务仍在运行，添加刷新按钮
-                    if st.button("🔄 刷新进度", type="primary"):
-                        st.rerun()
+                    progress = task.get("progress", 0)
+                    current = task.get("current", 0)
+                    st.info(f"⏳ 任务进行中... {current}/{total} ({progress}%)")
+                    st.progress(progress / 100 if progress > 0 else 0.01,
+                                text=f"分析中 {current}/{total}")
+                    time.sleep(2)
+                    st.rerun()
                     return
 
-        # 提交后台任务
         from services.task_manager import get_task_manager, TaskType
         from ui.components.task_monitor import render_task_result
         
-        task_manager = get_task_manager(self._get_orchestrator().db)
+        orchestrator = self._get_orchestrator()
+        task_manager = get_task_manager(
+            orchestrator.db,
+            model=orchestrator.llm.model,
+            api_key=orchestrator.llm.api_key
+        )
         
         task_data = {
             "leads": leads,
@@ -430,20 +407,16 @@ class LeadAnalysisPage(AnalysisPage):
         st.session_state.lead_analysis_task_id = task_id
         
         st.success(f"✅ 任务已提交到后台执行！")
-        st.info(f"📋 任务ID: {task_id[:8]}...")
+        st.info(f"📋 任务ID: {task_id[:8]}... | 共 {total} 条线索")
         st.info("💡 **提示**：您可以切换到其他页面，任务将在后台继续执行。返回此页面可查看进度。")
         
-        # 显示初始进度
         st.progress(0, text=f"准备分析 {total} 条线索...")
-        
-        # 添加刷新按钮
-        if st.button("🔄 刷新进度", type="primary"):
-            st.rerun()
+        time.sleep(2)
+        st.rerun()
 
     def _show_lead_batch_results(self, state: dict):
-        """展示线索批量分析结果"""
-        results = state["results"]
-        total = state["total"]
+        results = state.get("results", [])
+        total = state.get("total", len(results))
         success_count = sum(1 for r in results if r.get("success"))
         fail_count = sum(1 for r in results if not r.get("success"))
 
@@ -452,15 +425,15 @@ class LeadAnalysisPage(AnalysisPage):
             msg += f"（{fail_count} 条失败）"
         callout(msg, type="success", icon="&#10003;")
 
-        # 展示结果
         divider()
         st.subheader("分析结果")
 
-        for r in results:
+        for i, r in enumerate(results):
             if r.get("success"):
-                profile = r["data"]["profile"]
-                raw = r["data"].get("raw_data", {})
-                lid = r["data"].get("lead_id", "")[:8]
+                data = r.get("data", {})
+                profile = data.get("profile", data)
+                raw = data.get("raw_data", data.get("raw_data_json", {}))
+                lid = data.get("lead_id", "")[:8]
                 company = raw.get("company", raw.get("公司名称", ""))
                 name = raw.get("name", raw.get("联系人", ""))
                 score = profile.get("lead_score", 0)
@@ -471,14 +444,13 @@ class LeadAnalysisPage(AnalysisPage):
                     label += f" · {name}"
 
                 with st.expander(
-                    f"#{r['index']+1} [{lid}] {'🟢' if grade in ['A','B+'] else '🟡' if grade == 'B' else '🔴'} {grade}级 | {score}分 | {label}"
+                    f"#{i+1} [{lid}] {'🟢' if grade in ['A','B+'] else '🟡' if grade == 'B' else '🔴'} {grade}级 | {score}分 | {label}"
                 ):
                     self._display_profile_simple(profile)
             else:
-                with st.expander(f"线索 #{r['index']+1} - 分析失败"):
+                with st.expander(f"线索 #{i+1} - 分析失败"):
                     st.error(r.get("error", "未知错误"))
 
-        # 清理状态
         st.session_state.lead_df = None
         st.session_state.lead_field_mapping = None
         if "lead_batch_state" in st.session_state:
