@@ -7,18 +7,22 @@ Content2Revenue AI - UI 组件库
 """
 
 import streamlit as st
+import html
 from typing import Optional, Callable, List, Dict, Any
 
 
-def _html(html: str) -> None:
+def _esc(value: str) -> str:
+    return html.escape(str(value))
+
+
+def _html(html_str: str) -> None:
     """安全渲染 HTML 字符串。
 
     Streamlit 的 st.markdown 使用 CommonMarkdown 解析器，会将 4 空格缩进的行
     当作代码块。本函数将 HTML 中的换行和多余空白压缩为单行，彻底避免此问题。
     """
     import re
-    # 将所有连续空白（含换行、制表符）压缩为单个空格
-    collapsed = re.sub(r'\s+', ' ', html).strip()
+    collapsed = re.sub(r'\s+', ' ', html_str).strip()
     st.markdown(collapsed, unsafe_allow_html=True)
 
 
@@ -91,7 +95,7 @@ def metric_card(
     if delta:
         delta_html = f"""
         <span class="c2r-metric-delta {delta_class}">
-            {arrow} {delta}
+            {arrow} {_esc(delta)}
         </span>
         """
 
@@ -110,9 +114,9 @@ def metric_card(
     html = f"""
     <div class="c2r-metric-card c2r-animate-slide-up" style="{border_style}">
         {icon_html}
-        <div class="c2r-metric-title">{title}</div>
+        <div class="c2r-metric-title">{_esc(title)}</div>
         <div style="display: flex; align-items: baseline; gap: 12px;">
-            <div class="c2r-metric-value">{value}</div>
+            <div class="c2r-metric-value">{_esc(value)}</div>
             {delta_html}
         </div>
         {subtitle_html}
@@ -180,7 +184,7 @@ def data_card(
     if footer:
         footer_html = f"""
         <div class="c2r-data-card-footer">
-            <span style="font-size:0.8125rem;color:var(--text-tertiary);">{footer}</span>
+            <span style="font-size:0.8125rem;color:var(--text-tertiary);">{_esc(footer)}</span>
         </div>
         """
 
@@ -188,12 +192,12 @@ def data_card(
     <div class="c2r-data-card c2r-animate-scale-in" style="{border_style}">
         <div class="c2r-data-card-header">
             <div class="c2r-data-card-title">
-                {icon_html}{title}
+                {icon_html}{_esc(title)}
             </div>
             {actions_html}
         </div>
         <div class="c2r-data-card-body">
-            {content}
+            {_esc(content)}
         </div>
         {footer_html}
     </div>
@@ -241,7 +245,7 @@ def status_badge(
 
     html = f"""
     <span class="c2r-badge c2r-badge--{color} {size_class} {pulse_class}">
-        {dot_html}{text}
+        {dot_html}{_esc(text)}
     </span>
     """
 
@@ -283,9 +287,9 @@ def empty_state(
 
     html = f"""
     <div class="c2r-empty-state c2r-animate-fade-in">
-        <div class="c2r-empty-state-icon">{icon_display}</div>
-        <div class="c2r-empty-state-title">{title}</div>
-        <div class="c2r-empty-state-desc">{description}</div>
+        <div class="c2r-empty-state-icon">{_esc(icon_display)}</div>
+        <div class="c2r-empty-state-title">{_esc(title)}</div>
+        <div class="c2r-empty-state-desc">{_esc(description)}</div>
     </div>
     """
 
@@ -355,12 +359,12 @@ def page_header(
 
     subtitle_html = ""
     if subtitle:
-        subtitle_html = f'<div class="c2r-page-subtitle">{subtitle}</div>'
+        subtitle_html = f'<div class="c2r-page-subtitle">{_esc(subtitle)}</div>'
 
     html = f"""
     <div class="c2r-page-header c2r-animate-fade-in">
         <div class="c2r-page-header-info">
-            <h1 class="c2r-page-title">{title}</h1>
+            <h1 class="c2r-page-title">{_esc(title)}</h1>
             {subtitle_html}
         </div>
         {actions_html}
@@ -409,8 +413,8 @@ def tabs(
         tabs_html += f"""
         <button class="c2r-tab {active_class}"
                 onclick="document.querySelectorAll('.c2r-tab').forEach(t => t.classList.remove('c2r-tab--active')); this.classList.add('c2r-tab--active');"
-                data-tab="{option}">
-            {option}
+                data-tab="{_esc(option)}">
+            {_esc(option)}
         </button>
         """
     tabs_html += '</div>'
@@ -465,8 +469,8 @@ def progress_indicator(
     html = f"""
     <div class="c2r-progress-wrapper c2r-animate-slide-up">
         <div class="c2r-progress-label">
-            <span class="c2r-progress-label-text">{label}</span>
-            <span class="c2r-progress-label-value">{display_value}</span>
+            <span class="c2r-progress-label-text">{_esc(label)}</span>
+            <span class="c2r-progress-label-value">{_esc(display_value)}</span>
         </div>
         <div class="c2r-progress-track">
             <div class="c2r-progress-fill c2r-progress-fill--{color}"
@@ -585,7 +589,7 @@ def callout(
         border-opacity: 0.3;
     ">
         <span style="font-size: 1.125rem; flex-shrink: 0; color: {text_color};">{display_icon}</span>
-        <span style="font-size: 0.875rem; color: var(--text-primary); line-height: 1.5;">{message}</span>
+        <span style="font-size: 0.875rem; color: var(--text-primary); line-height: 1.5;">{_esc(message)}</span>
     </div>
     """
 
@@ -612,8 +616,8 @@ def sidebar_logo(
     <div class="c2r-sidebar-logo">
         <span style="font-size: 1.5rem; color: var(--brand-primary);">{icon}</span>
         <div>
-            <div class="c2r-sidebar-logo-text">{name}</div>
-            <div class="c2r-sidebar-logo-sub">{subtitle}</div>
+            <div class="c2r-sidebar-logo-text">{_esc(name)}</div>
+            <div class="c2r-sidebar-logo-sub">{_esc(subtitle)}</div>
         </div>
     </div>
     """
@@ -654,8 +658,8 @@ def sidebar_nav(
 
         html = f"""
         <div class="c2r-nav-item {active_class}">
-            <span>{item.get("icon", "")}</span>
-            <span>{item.get("label", "")}</span>
+            <span>{_esc(item.get("icon", ""))}</span>
+            <span>{_esc(item.get("label", ""))}</span>
         </div>
         """
 
@@ -700,13 +704,13 @@ def chart_container(
     """
     subtitle_html = ""
     if subtitle:
-        subtitle_html = f'<div class="c2r-chart-subtitle">{subtitle}</div>'
+        subtitle_html = f'<div class="c2r-chart-subtitle">{_esc(subtitle)}</div>'
 
     html = f"""
     <div class="c2r-chart-container c2r-animate-scale-in">
         <div class="c2r-chart-header">
             <div>
-                <div class="c2r-chart-title">{title}</div>
+                <div class="c2r-chart-title">{_esc(title)}</div>
                 {subtitle_html}
             </div>
         </div>
@@ -810,12 +814,12 @@ def stat_row(
                 font-weight: 700;
                 color: var(--text-primary);
                 font-variant-numeric: tabular-nums;
-            ">{item.get('value', '')}</div>
+            ">{_esc(item.get('value', ''))}</div>
             <div style="
                 font-size: 0.75rem;
                 color: var(--text-tertiary);
                 margin-top: 2px;
-            ">{item.get('label', '')}</div>
+            ">{_esc(item.get('label', ''))}</div>
         </div>
         """
 

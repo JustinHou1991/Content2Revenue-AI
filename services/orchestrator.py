@@ -44,35 +44,37 @@ class Orchestrator:
 
         logger.info("Orchestrator 初始化完成 (model=%s, db_path=%s)", model, db_path)
 
-    def analyze_content(self, script_text: str) -> Dict[str, Any]:
+    def analyze_content(self, script_text: str, conn=None) -> Dict[str, Any]:
         """
         分析单个脚本（端到端：分析 → 保存）
 
         Args:
             script_text: 脚本文本
+            conn: 可选的外部数据库连接，用于事务控制
 
         Returns:
             分析结果
         """
         logger.info("开始分析内容 (文本长度=%d)", len(script_text))
         result = self.content_analyzer.analyze(script_text)
-        self.db.save_content_analysis(result)
+        self.db.save_content_analysis(result, conn=conn)
         logger.info("内容分析完成, content_id=%s", result.get("content_id"))
         return result
 
-    def analyze_lead(self, lead_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_lead(self, lead_data: Dict[str, Any], conn=None) -> Dict[str, Any]:
         """
         分析单条线索（端到端：分析 → 保存）
 
         Args:
             lead_data: 线索数据
+            conn: 可选的外部数据库连接，用于事务控制
 
         Returns:
             分析结果
         """
         logger.info("开始分析线索")
         result = self.lead_analyzer.analyze(lead_data)
-        self.db.save_lead_analysis(result)
+        self.db.save_lead_analysis(result, conn=conn)
         logger.info("线索分析完成, lead_id=%s", result.get("lead_id"))
         return result
 
@@ -164,19 +166,15 @@ class Orchestrator:
         logger.info("开始完整 Pipeline")
 
         try:
-            # 使用单一事务包装所有数据库操作
             with self.db._get_conn() as conn:
                 conn.execute("BEGIN IMMEDIATE")
 
-                # Step 1: 分析内容
-                content_result = self.analyze_content(script_text)
+                content_result = self.analyze_content(script_text, conn=conn)
                 content_id: str = content_result["content_id"]
 
-                # Step 2: 分析线索
-                lead_result = self.analyze_lead(lead_data)
+                lead_result = self.analyze_lead(lead_data, conn=conn)
                 lead_id: str = lead_result["lead_id"]
 
-                # Step 3: 匹配
                 match_result = self.match_engine.match(
                     content_result["analysis"],
                     lead_result["profile"],
@@ -184,20 +182,18 @@ class Orchestrator:
                     lead_id=lead_result["lead_id"],
                 )
 
-                # 注入 content_id 和 lead_id 到 snapshot 中
                 match_result["content_snapshot"]["content_id"] = content_id
                 match_result["lead_snapshot"]["lead_id"] = lead_id
 
-                self.db.save_match_result(match_result)
+                self.db.save_match_result(match_result, conn=conn)
                 match_id: str = match_result["match_id"]
 
-                # Step 4: 生成策略
                 strategy_result = self.strategy_advisor.advise(
                     match_result,
                     content_feature=content_result["analysis"],
                     lead_profile=lead_result["profile"],
                 )
-                self.db.save_strategy_advice(strategy_result)
+                self.db.save_strategy_advice(strategy_result, conn=conn)
 
                 conn.commit()
 

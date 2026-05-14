@@ -11,6 +11,7 @@ Content2Revenue AI - API开放平台
 
 import os
 import sys
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
@@ -28,8 +29,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.auth_manager import AuthManager, AuthConfig, UserRole, UserStatus, create_auth_manager
 from core.tenant_manager import TenantManager, Tenant, TenantPlan
-from core.rate_limiter import RateLimiter
+from core.rate_limiter import RateLimiter, RateLimitConfig
 from utils.audit_logger import AuditLogger
+
+logger = logging.getLogger(__name__)
 
 # ==================== 配置 ====================
 
@@ -246,12 +249,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
+    logger.error("未处理的异常: %s", exc, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse(
             error_code="INTERNAL_ERROR",
-            message="服务器内部错误",
-            details={"error": str(exc)}
+            message="服务器内部错误，请稍后重试"
         ).dict()
     )
 

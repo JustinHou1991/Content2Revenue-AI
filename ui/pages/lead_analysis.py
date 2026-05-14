@@ -366,10 +366,12 @@ class LeadAnalysisPage(AnalysisPage):
 
         results = [None] * total
         completed = 0
+        completed_lock = threading.Lock()
 
         max_workers = min(5, total)
 
         def analyze_one(index: int, lead: dict):
+            nonlocal completed
             try:
                 result = orchestrator.lead_analyzer.analyze(
                     lead_data=lead.get("lead_data", {}),
@@ -382,6 +384,7 @@ class LeadAnalysisPage(AnalysisPage):
                 return index, {"success": False, "error": str(e)}
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_one, i, leads[i]): i
@@ -390,7 +393,8 @@ class LeadAnalysisPage(AnalysisPage):
             for future in as_completed(futures):
                 idx, result = future.result()
                 results[idx] = result
-                completed += 1
+                with completed_lock:
+                    completed += 1
                 pct = int(completed / total * 100)
                 progress_bar.progress(
                     pct / 100,

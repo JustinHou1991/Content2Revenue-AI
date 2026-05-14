@@ -83,7 +83,7 @@ class LeadAnalyzer(BaseAnalyzer):
         lead_data = input_data.get("lead_data")
         if not lead_data:
             raise ValueError("线索数据不能为空")
-        return input_data
+        return super()._validate_input(input_data)
 
     def _build_prompt_from_input(self, input_data: Any) -> str:
         """根据输入数据构建提示词

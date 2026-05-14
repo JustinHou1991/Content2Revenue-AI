@@ -415,17 +415,35 @@ class LLMClient:
         Note:
             不支持缓存，每次都是实时调用
         """
-        stream = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens or self.config["max_tokens_default"],
-            stream=True,
-        )
-
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        try:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens or self.config["max_tokens_default"],
+                stream=True,
+            )
+            full_content_parts: List[str] = []
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    delta_content = chunk.choices[0].delta.content
+                    full_content_parts.append(delta_content)
+                    yield delta_content
+            full_content = "".join(full_content_parts)
+            input_tokens = self._estimate_tokens(messages)
+            output_tokens = self._estimate_tokens_from_text(full_content)
+            with self._lock:
+                self._total_input_tokens += input_tokens
+                self._total_output_tokens += output_tokens
+                self._total_calls += 1
+            logger.debug(
+                "chat_stream() token用量: input=%d, output=%d",
+                input_tokens,
+                output_tokens,
+            )
+        except Exception as e:
+            logger.error("chat_stream() 流式调用失败: %s", e)
+            raise RuntimeError(f"流式调用失败: {str(e)}")
 
     def chat_json(
         self,
@@ -574,51 +592,6 @@ class LLMClient:
                 continue
 
         raise RuntimeError("JSON解析失败，已用尽所有重试次数")
-
-    def chat_stream(
-        self, messages: List[Dict[str, str]], temperature: float = 0.3
-    ) -> Iterator[str]:
-        """
-        流式输出（用于UI展示）
-
-        Args:
-            messages: OpenAI格式的消息列表
-            temperature: 温度参数
-
-        Yields:
-            每个chunk的文本内容
-        """
-        try:
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                stream=True,
-            )
-            # 收集完整内容用于记录用量
-            full_content_parts: List[str] = []
-            for chunk in stream:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    full_content_parts.append(delta.content)
-                    yield delta.content
-            # 流结束后记录 token 用量
-            full_content = "".join(full_content_parts)
-            # 估算 token 数（流式响应没有 usage 字段）
-            input_tokens = self._estimate_tokens(messages)
-            output_tokens = self._estimate_tokens_from_text(full_content)
-            with self._lock:
-                self._total_input_tokens += input_tokens
-                self._total_output_tokens += output_tokens
-                self._total_calls += 1
-            logger.debug(
-                "chat_stream() token用量: input=%d, output=%d",
-                input_tokens,
-                output_tokens,
-            )
-        except Exception as e:
-            logger.error("chat_stream() 流式调用失败: %s", e)
-            raise RuntimeError(f"流式调用失败: {str(e)}")
 
     def _estimate_tokens(self, messages: List[Dict[str, str]]) -> int:
         """估算消息列表的 token 数（简单估算：1 token ≈ 4 字符）"""

@@ -212,6 +212,7 @@ class ContentAnalysisPage(AnalysisPage):
 
     def _handle_batch_analysis(self):
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
         from utils.field_mapping import normalize_columns
 
         if st.session_state.content_field_mapping is None:
@@ -261,10 +262,12 @@ class ContentAnalysisPage(AnalysisPage):
 
         results = [None] * total
         completed = 0
+        completed_lock = threading.Lock()
 
         max_workers = min(5, total)
 
         def analyze_one(index: int, script: dict):
+            nonlocal completed
             try:
                 result = orchestrator.content_analyzer.analyze(
                     script.get("script_text", ""),
@@ -284,7 +287,8 @@ class ContentAnalysisPage(AnalysisPage):
             for future in as_completed(futures):
                 idx, result = future.result()
                 results[idx] = result
-                completed += 1
+                with completed_lock:
+                    completed += 1
                 pct = int(completed / total * 100)
                 progress_bar.progress(
                     pct / 100,

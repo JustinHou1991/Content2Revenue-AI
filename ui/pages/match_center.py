@@ -5,6 +5,10 @@
 """
 
 import streamlit as st
+import logging
+import threading
+
+logger = logging.getLogger(__name__)
 
 from ui.base_page import MatchPage
 from ui.components.data_display import render_match_result_details
@@ -200,9 +204,10 @@ class MatchCenterPage(MatchPage):
                 for lead in leads
             ]
 
-            results = []
+            results = [None] * total_leads
             match_results_to_save = []
             completed = 0
+            completed_lock = threading.Lock()
             max_workers = min(5, total_leads)
 
             def match_one_lead(index: int, lead_data_item: dict):
@@ -257,7 +262,6 @@ class MatchCenterPage(MatchPage):
                     return index, None, [], str(e)
 
             from concurrent.futures import ThreadPoolExecutor, as_completed
-            results = [None] * total_leads
 
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {
@@ -269,7 +273,8 @@ class MatchCenterPage(MatchPage):
                     results[idx] = result_item
                     if result_item:
                         match_results_to_save.extend(to_save)
-                    completed += 1
+                    with completed_lock:
+                        completed += 1
                     pct = int(completed / total_leads * 100)
                     progress_bar.progress(
                         pct / 100,

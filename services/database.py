@@ -441,27 +441,31 @@ class Database:
 
     # ===== 内容分析 CRUD =====
 
-    def save_content_analysis(self, result: Dict[str, Any]) -> str:
+    def save_content_analysis(self, result: Dict[str, Any], conn=None) -> str:
         """保存内容分析结果"""
-        with self._get_conn() as conn:
-            content_id = result["content_id"]
-            now = datetime.now().isoformat()
+        if conn is None:
+            with self._get_conn() as conn:
+                return self._save_content_analysis_impl(conn, result)
+        return self._save_content_analysis_impl(conn, result)
 
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO content_analysis
-                (id, raw_text, analysis_json, model, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    content_id,
-                    result["raw_text"],
-                    json.dumps(result["analysis"], ensure_ascii=False),
-                    result.get("model", ""),
-                    result["created_at"],
-                    now,
-                ),
-            )
+    def _save_content_analysis_impl(self, conn, result: Dict[str, Any]) -> str:
+        content_id = result["content_id"]
+        now = datetime.now().isoformat()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO content_analysis
+            (id, raw_text, analysis_json, model, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """,
+            (
+                content_id,
+                result["raw_text"],
+                json.dumps(result["analysis"], ensure_ascii=False),
+                result.get("model", ""),
+                result["created_at"],
+                now,
+            ),
+        )
         logger.info("保存内容分析: %s", content_id)
         return content_id
 
@@ -536,27 +540,31 @@ class Database:
 
     # ===== 线索分析 CRUD =====
 
-    def save_lead_analysis(self, result: Dict[str, Any]) -> str:
+    def save_lead_analysis(self, result: Dict[str, Any], conn=None) -> str:
         """保存线索分析结果"""
-        with self._get_conn() as conn:
-            lead_id = result["lead_id"]
-            now = datetime.now().isoformat()
+        if conn is None:
+            with self._get_conn() as conn:
+                return self._save_lead_analysis_impl(conn, result)
+        return self._save_lead_analysis_impl(conn, result)
 
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO lead_analysis
-                (id, raw_data_json, profile_json, model, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    lead_id,
-                    json.dumps(result["raw_data"], ensure_ascii=False),
-                    json.dumps(result["profile"], ensure_ascii=False),
-                    result.get("model", ""),
-                    result["created_at"],
-                    now,
-                ),
-            )
+    def _save_lead_analysis_impl(self, conn, result: Dict[str, Any]) -> str:
+        lead_id = result["lead_id"]
+        now = datetime.now().isoformat()
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO lead_analysis
+            (id, raw_data_json, profile_json, model, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """,
+            (
+                lead_id,
+                json.dumps(result["raw_data"], ensure_ascii=False),
+                json.dumps(result["profile"], ensure_ascii=False),
+                result.get("model", ""),
+                result["created_at"],
+                now,
+            ),
+        )
         logger.info("保存线索分析: %s", lead_id)
         return lead_id
 
@@ -626,6 +634,7 @@ class Database:
         result: Dict[str, Any],
         content_id: str = "",
         lead_id: str = "",
+        conn=None,
     ) -> str:
         """
         保存匹配结果
@@ -634,37 +643,42 @@ class Database:
             result: MatchEngine.match() 返回的匹配结果字典
             content_id: 内容ID（优先使用此参数，其次从result中提取）
             lead_id: 线索ID（优先使用此参数，其次从result中提取）
+            conn: 可选的外部连接，用于事务控制
 
         Returns:
             match_id
         """
-        with self._get_conn() as conn:
-            match_id = result["match_id"]
+        if conn is None:
+            with self._get_conn() as conn:
+                return self._save_match_result_impl(conn, result, content_id, lead_id)
+        return self._save_match_result_impl(conn, result, content_id, lead_id)
 
-            # 确定content_id和lead_id：优先使用显式传入的参数
-            resolved_content_id = content_id or result.get("content_snapshot", {}).get(
-                "content_id", ""
-            )
-            resolved_lead_id = lead_id or result.get("lead_snapshot", {}).get("lead_id", "")
-
-            conn.execute(
-                """
-                INSERT INTO match_results
-                (id, content_id, lead_id, match_result_json,
-                 content_snapshot_json, lead_snapshot_json, model, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    match_id,
-                    resolved_content_id,
-                    resolved_lead_id,
-                    json.dumps(result["match_result"], ensure_ascii=False),
-                    json.dumps(result.get("content_snapshot", {}), ensure_ascii=False),
-                    json.dumps(result.get("lead_snapshot", {}), ensure_ascii=False),
-                    result.get("model", ""),
-                    result["created_at"],
-                ),
-            )
+    def _save_match_result_impl(
+        self, conn, result: Dict[str, Any], content_id: str, lead_id: str
+    ) -> str:
+        match_id = result["match_id"]
+        resolved_content_id = content_id or result.get("content_snapshot", {}).get(
+            "content_id", ""
+        )
+        resolved_lead_id = lead_id or result.get("lead_snapshot", {}).get("lead_id", "")
+        conn.execute(
+            """
+            INSERT INTO match_results
+            (id, content_id, lead_id, match_result_json,
+             content_snapshot_json, lead_snapshot_json, model, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                match_id,
+                resolved_content_id,
+                resolved_lead_id,
+                json.dumps(result["match_result"], ensure_ascii=False),
+                json.dumps(result.get("content_snapshot", {}), ensure_ascii=False),
+                json.dumps(result.get("lead_snapshot", {}), ensure_ascii=False),
+                result.get("model", ""),
+                result["created_at"],
+            ),
+        )
         logger.info(
             "保存匹配结果: %s (content=%s, lead=%s)",
             match_id,
@@ -731,27 +745,31 @@ class Database:
 
     # ===== 策略建议 CRUD =====
 
-    def save_strategy_advice(self, result: Dict[str, Any]) -> str:
+    def save_strategy_advice(self, result: Dict[str, Any], conn=None) -> str:
         """保存策略建议"""
-        with self._get_conn() as conn:
-            strategy_id = result["strategy_id"]
+        if conn is None:
+            with self._get_conn() as conn:
+                return self._save_strategy_advice_impl(conn, result)
+        return self._save_strategy_advice_impl(conn, result)
 
-            conn.execute(
-                """
-                INSERT INTO strategy_advice
-                (id, match_id, content_id, lead_id, strategy_json, model, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    strategy_id,
-                    result.get("match_id", ""),
-                    result.get("content_id", ""),
-                    result.get("lead_id", ""),
-                    json.dumps(result["strategy"], ensure_ascii=False),
-                    result.get("model", ""),
-                    result["created_at"],
-                ),
-            )
+    def _save_strategy_advice_impl(self, conn, result: Dict[str, Any]) -> str:
+        strategy_id = result["strategy_id"]
+        conn.execute(
+            """
+            INSERT INTO strategy_advice
+            (id, match_id, content_id, lead_id, strategy_json, model, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                strategy_id,
+                result.get("match_id", ""),
+                result.get("content_id", ""),
+                result.get("lead_id", ""),
+                json.dumps(result["strategy"], ensure_ascii=False),
+                result.get("model", ""),
+                result["created_at"],
+            ),
+        )
         logger.info("保存策略建议: %s", strategy_id)
         return strategy_id
 
@@ -897,9 +915,7 @@ class Database:
             return value
 
     def set_setting(self, key: str, value: str) -> None:
-        """设置值"""
-        # API_KEY 需要加密后存储
-        if key == "API_KEY" and value:
+        if value and ("API_KEY" in key.upper() or "KEY" in key.upper()):
             value = self._encrypt_value(value)
         with self._get_conn() as conn:
             now = datetime.now().isoformat()
