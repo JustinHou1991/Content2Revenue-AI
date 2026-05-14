@@ -203,7 +203,7 @@ class MatchCenterPage(MatchPage):
             results = []
             match_results_to_save = []
             completed = 0
-            max_workers = min(3, total_leads)
+            max_workers = min(5, total_leads)
 
             def match_one_lead(index: int, lead_data_item: dict):
                 try:

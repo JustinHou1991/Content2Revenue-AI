@@ -262,11 +262,14 @@ class ContentAnalysisPage(AnalysisPage):
         results = [None] * total
         completed = 0
 
-        max_workers = min(3, total)
+        max_workers = min(5, total)
 
         def analyze_one(index: int, script: dict):
             try:
-                result = orchestrator.content_analyzer.analyze(script)
+                result = orchestrator.content_analyzer.analyze(
+                    script.get("script_text", ""),
+                    script_id=script.get("script_id")
+                )
                 orchestrator.db.save_content_analysis(result)
                 return index, {"success": True, "data": result}
             except Exception as e:

@@ -367,7 +367,7 @@ class LeadAnalysisPage(AnalysisPage):
         results = [None] * total
         completed = 0
 
-        max_workers = min(3, total)
+        max_workers = min(5, total)
 
         def analyze_one(index: int, lead: dict):
             try:

@@ -132,8 +132,8 @@ def submit_background_analysis(
     # 保存到session_state
     st.session_state.current_task_id = task_id
     
-    st.info(f"📋 任务已提交到后台执行，任务ID: {task_id[:8]}...")
-    st.info("💡 提示：您可以切换到其他页面，任务将在后台继续执行")
+    st.info(f"📋 任务已提交，任务ID: {task_id[:8]}...")
+    st.info("⏳ 任务正在执行中，请耐心等待...")
     
     return task_id
 
