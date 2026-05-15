@@ -14,9 +14,8 @@ Content2Revenue AI - 统一配置管理模块
 """
 
 import os
-import sys
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)

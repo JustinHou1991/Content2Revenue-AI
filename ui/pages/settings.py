@@ -3,6 +3,7 @@
 """
 
 import streamlit as st
+from ui.components.design_system import divider
 
 
 # 内置模型列表

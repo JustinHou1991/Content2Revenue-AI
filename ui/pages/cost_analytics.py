@@ -463,8 +463,8 @@ def render_real_time_monitor():
         unsafe_allow_html=True,
     )
 
-    if "llm_client" in st.session_state:
-        llm = st.session_state.llm_client
+    if "orchestrator" in st.session_state and st.session_state.orchestrator:
+        llm = st.session_state.orchestrator.llm_client
         summary = llm.get_usage_summary()
 
         metric_row([

@@ -35,14 +35,14 @@ class InputValidator:
             logger.warning(f"输入文本过长 ({len(text)} > {max_length})，已截断")
             text = text[:max_length]
 
-        # HTML 转义
-        text = html.escape(text)
-
         # 检查危险模式
         for pattern in cls.DANGEROUS_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE | re.DOTALL):
                 logger.warning(f"检测到危险模式: {pattern}")
                 text = re.sub(pattern, '[REMOVED]', text, flags=re.IGNORECASE | re.DOTALL)
+
+        # HTML 转义
+        text = html.escape(text)
 
         return text
 

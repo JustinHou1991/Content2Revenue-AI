@@ -4,6 +4,9 @@
 """
 
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Optional
 
 from .llm_client import LLMClient
@@ -169,10 +172,6 @@ class Orchestrator:
             return []
 
         logger.info("开始批量策略生成: %d 条匹配结果, max_workers=%d", len(match_ids), max_workers)
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import threading
-        import time
 
         total = len(match_ids)
         results = [None] * total

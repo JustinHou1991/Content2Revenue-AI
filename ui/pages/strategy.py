@@ -113,7 +113,7 @@ class StrategyPage(BasePage):
     def _display_strategy(self, result: dict, key_prefix: str = "strategy"):
         """展示策略建议"""
         strategy = result.get("strategy", {})
-        strategy_id = result.get("strategy_id", "")[:8]
+        strategy_id = result.get("strategy_id") or result.get("id", "")[:8]
         kp = f"{key_prefix}_{strategy_id}"
 
         callout(f"策略建议已生成！ID: {strategy_id}...", type="success", icon="✅")
@@ -277,7 +277,7 @@ class StrategyPage(BasePage):
                 except AttributeError:
                     st.success("已复制到剪贴板！")
         with col2:
-            if st.button("重新生成", key="regenerate"):
+            if st.button("重新生成", key=f"{kp}_regenerate"):
                 st.rerun()
 
         # 策略反馈表单
@@ -341,7 +341,7 @@ class StrategyPage(BasePage):
         st.subheader("策略效果反馈")
         st.caption("帮助我们改进策略建议质量，请反馈您是否采纳了此策略及实际效果")
 
-        strategy_id = result.get("strategy_id", "")
+        strategy_id = result.get("strategy_id") or result.get("id", "")
 
         # 检查是否已有反馈
         try:
@@ -572,7 +572,7 @@ class StrategyPage(BasePage):
                         # === 反馈入口 ===
                         st.markdown("---")
                         if not feedback:
-                            self._render_feedback_form(s.get("id", ""))
+                            self._render_feedback_form(s)
                         else:
                             st.caption("✅ 已提交反馈，感谢您的参与！")
             else:

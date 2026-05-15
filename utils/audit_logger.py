@@ -1,5 +1,6 @@
 """审计日志 - 记录用户操作和系统事件"""
 import json
+import os
 import time
 import hashlib
 from datetime import datetime
@@ -16,6 +17,7 @@ class AuditLogger:
 
     def __init__(self, db_path: str = "data/audit.db"):
         self.db_path = db_path
+        os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
         self._init_table()
 
     def _init_table(self):

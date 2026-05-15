@@ -198,7 +198,7 @@ class SQLiteBackend(CacheBackend):
             try:
                 with sqlite3.connect(self._db_path) as conn:
                     size = conn.execute("SELECT COUNT(*) FROM llm_cache").fetchone()[0]
-            except:
+            except Exception:
                 size = 0
             return {
                 "size": size,

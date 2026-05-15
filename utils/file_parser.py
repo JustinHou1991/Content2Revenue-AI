@@ -203,9 +203,13 @@ def parse_file(uploaded_file) -> Dict[str, Any]:
         result["content"] = parse_pdf(file_bytes)
         result["type"] = "text"
         
-    elif file_type in ["docx", "doc"]:
+    elif file_type == "docx":
         result["content"] = parse_word(file_bytes)
         result["type"] = "text"
+        
+    elif file_type == "doc":
+        result["content"] = f"[不支持旧版 .doc 格式，请转换为 .docx 后重试]\n文件名: {filename}"
+        result["type"] = "error"
         
     elif file_type in ["xlsx", "xls"]:
         result["content"] = parse_excel(file_bytes)

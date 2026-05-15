@@ -40,7 +40,7 @@ class HealthChecker:
         """检查磁盘空间"""
         import shutil
         try:
-            stat = shutil.disk_usage("/workspace")
+            stat = shutil.disk_usage(os.path.abspath(os.sep))
             free_gb = stat.free / (1024**3)
             total_gb = stat.total / (1024**3)
             usage_percent = (stat.used / stat.total) * 100

@@ -352,7 +352,8 @@ class MatchCenterPage(MatchPage):
             if records:
                 for idx, record in enumerate(records, 1):
                     mr = record.get("match_result_json", {})
-                    score = mr.get("overall_score", "N/A")
+                    score_raw = mr.get("overall_score", 0)
+                    score = score_raw if isinstance(score_raw, (int, float)) else 0
                     reason = mr.get("match_reason", "")
 
                     # 提取快照信息

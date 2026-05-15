@@ -101,24 +101,36 @@ class IndustryReportPage(BasePage):
         matches = orchestrator.db.get_all_match_results(limit=500)
 
         # 筛选时间范围
-        cutoff_date = datetime.now() - timedelta(days=days_range)
+        cutoff_date = (datetime.now() - timedelta(days=days_range)).isoformat()
         
-        # 生成报告
+        filtered_contents = [
+            c for c in contents
+            if c.get("created_at", "") >= cutoff_date
+        ]
+        filtered_leads = [
+            l for l in leads
+            if l.get("created_at", "") >= cutoff_date
+        ]
+        filtered_matches = [
+            m for m in matches
+            if m.get("created_at", "") >= cutoff_date
+        ]
+
         if report_type == "内容营销趋势分析":
             report = self._generate_content_trend_report(
-                contents, days_range, industry, include_charts, include_recommendations
+                filtered_contents, days_range, industry, include_charts, include_recommendations
             )
         elif report_type == "线索画像分布报告":
             report = self._generate_lead_distribution_report(
-                leads, days_range, industry, include_charts
+                filtered_leads, days_range, industry, include_charts
             )
         elif report_type == "内容-线索匹配分析":
             report = self._generate_match_analysis_report(
-                contents, leads, matches, days_range, industry, include_recommendations
+                filtered_contents, filtered_leads, filtered_matches, days_range, industry, include_recommendations
             )
         else:
             report = self._generate_comprehensive_report(
-                contents, leads, matches, days_range, industry,
+                filtered_contents, filtered_leads, filtered_matches, days_range, industry,
                 include_charts, include_recommendations
             )
 

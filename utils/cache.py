@@ -5,18 +5,17 @@
 同时提供统一缓存接口 UnifiedCache，整合内存LRU缓存与SQLite持久化缓存。
 """
 
-import hashlib
 import json
+import hashlib
 import sqlite3
 import threading
 import time
-from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 
 class ContentCache:
-    """基于SQLite的内容分析结果缓存系统"""
+    """基于SQLite的内容分析结果缓存系统（线程安全）"""
 
     def __init__(self, db_path: Optional[str] = None):
         """
@@ -30,6 +29,7 @@ class ContentCache:
             db_path = project_root / "cache.db"
 
         self.db_path = str(db_path)
+        self._lock = threading.Lock()
         self._init_db()
 
     def _init_db(self) -> None:
@@ -74,32 +74,33 @@ class ContentCache:
         """
         current_time = time.time()
 
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT result, expires_at FROM analysis_cache WHERE content_hash = ?",
-                (content_hash,),
-            )
-            row = cursor.fetchone()
-
-            if row is None:
-                return None
-
-            result_json, expires_at = row
-
-            # 检查是否过期
-            if current_time > expires_at:
-                # 删除过期缓存
-                conn.execute(
-                    "DELETE FROM analysis_cache WHERE content_hash = ?", (content_hash,)
+        with self._lock:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT result, expires_at FROM analysis_cache WHERE content_hash = ?",
+                    (content_hash,),
                 )
-                conn.commit()
-                return None
+                row = cursor.fetchone()
 
-            # 解析JSON结果
-            try:
-                return json.loads(result_json)
-            except json.JSONDecodeError:
-                return None
+                if row is None:
+                    return None
+
+                result_json, expires_at = row
+
+                # 检查是否过期
+                if current_time > expires_at:
+                    # 删除过期缓存
+                    conn.execute(
+                        "DELETE FROM analysis_cache WHERE content_hash = ?", (content_hash,)
+                    )
+                    conn.commit()
+                    return None
+
+                # 解析JSON结果
+                try:
+                    return json.loads(result_json)
+                except json.JSONDecodeError:
+                    return None
 
     def set_cached_analysis(
         self, content_hash: str, result: Any, ttl: int = 3600
@@ -123,16 +124,17 @@ class ContentCache:
         except (TypeError, ValueError):
             return False
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO analysis_cache
-                (content_hash, result, created_at, expires_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (content_hash, result_json, current_time, expires_at),
-            )
-            conn.commit()
+        with self._lock:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO analysis_cache
+                    (content_hash, result, created_at, expires_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (content_hash, result_json, current_time, expires_at),
+                )
+                conn.commit()
 
         return True
 
@@ -560,11 +562,14 @@ class UnifiedCache:
 
 # 全局缓存实例
 default_cache: Optional[ContentCache] = None
+_cache_lock = threading.Lock()
 
 
 def get_cache() -> ContentCache:
-    """获取默认缓存实例（单例模式）"""
+    """获取默认缓存实例（线程安全单例模式）"""
     global default_cache
     if default_cache is None:
-        default_cache = ContentCache()
+        with _cache_lock:
+            if default_cache is None:
+                default_cache = ContentCache()
     return default_cache

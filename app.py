@@ -6,6 +6,8 @@ AI驱动的内容-商业转化智能平台
 import streamlit as st
 import os
 import sys
+import traceback
+import logging
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -39,7 +41,7 @@ logger = get_logger(__name__)
 # 固化模型配置（免费API Key，仅用于展示测试）
 # ============================================================
 DEFAULT_MODEL = os.environ.get("C2R_DEFAULT_MODEL", "LongCat-2.0-Preview")
-DEFAULT_API_KEY = os.environ.get("C2R_API_KEY", "ak_28d06A0NE4BA8hu9ok17L5Nj3pt5N")
+DEFAULT_API_KEY = os.environ.get("C2R_API_KEY", "")
 
 # 初始化session state
 if "orchestrator" not in st.session_state:
@@ -50,7 +52,8 @@ if "initialized" not in st.session_state:
 
 def _safe_error_message(error: Exception) -> str:
     """将内部错误转换为用户友好的消息"""
-    error_str = str(error)
+    error_str = str(error) if error else ""
+    logger.warning("用户可见错误: %s", error_str[:200])
     if "401" in error_str or "Authentication" in error_str:
         return "API Key 无效或已过期"
     if "timeout" in error_str.lower():
@@ -81,10 +84,8 @@ def _auto_init_orchestrator():
         st.session_state.initialized = True
         return True
     except Exception as e:
-        import traceback
         err_trace = traceback.format_exc()
         logger.error("初始化失败: %s", e, exc_info=True)
-        # 用用户友好的错误提示，不泄露敏感信息
         st.session_state.initialized = False
         st.error(f"⚠️ 系统初始化失败: {str(e)}")
         with st.expander("查看技术详情（供调试用）"):
@@ -233,7 +234,6 @@ def main():
             from ui.pages.settings import render_settings
             render_settings()
     except Exception as e:
-        import traceback
         logger.error("页面渲染异常: %s", e, exc_info=True)
         st.error(f"页面加载出错: {_safe_error_message(e)}")
         with st.expander("查看错误详情"):

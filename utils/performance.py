@@ -219,14 +219,14 @@ def benchmark(iterations: int = 100) -> Callable[[F], Callable[[], dict]]:
         print(f"Avg: {stats['avg_ms']:.2f}ms")
     """
 
-    def decorator(func: F) -> Callable[[], dict]:
+    def decorator(func: F) -> Callable[..., dict]:
         @functools.wraps(func)
-        def wrapper() -> dict:
+        def wrapper(*args, **kwargs) -> dict:
             times: list[float] = []
 
             for _ in range(iterations):
                 start = time.perf_counter()
-                func()
+                func(*args, **kwargs)
                 end = time.perf_counter()
                 times.append((end - start) * 1000)
 

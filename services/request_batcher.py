@@ -2,7 +2,6 @@
 import asyncio
 from typing import List, Dict, Any, Callable, Optional
 from collections import defaultdict
-import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,6 +30,7 @@ class RequestBatcher:
         """
         future = asyncio.Future()
 
+        batch_to_process = None
         async with self._lock:
             self._pending[key].append({
                 "request": request,
@@ -39,7 +39,12 @@ class RequestBatcher:
 
             # 如果达到批处理大小，立即处理
             if len(self._pending[key]) >= self.batch_size:
-                await self._process_batch(key, processor)
+                batch_to_process = self._pending[key][:self.batch_size]
+                self._pending[key] = self._pending[key][self.batch_size:]
+                self._processing[key] = True
+
+        if batch_to_process:
+            await self._process_batch(key, processor, batch_to_process)
 
         # 如果没有立即处理，启动超时处理
         if not future.done():
@@ -53,43 +58,46 @@ class RequestBatcher:
         await asyncio.sleep(self.batch_timeout)
         async with self._lock:
             if self._pending[key] and not self._processing[key]:
-                await self._process_batch(key, processor)
+                batch = self._pending[key][:self.batch_size]
+                self._pending[key] = self._pending[key][self.batch_size:]
+                self._processing[key] = True
+        if self._processing.get(key):
+            await self._process_batch(key, processor, batch)
 
-    async def _process_batch(self, key: str, processor: Callable[[List[Dict]], List[Any]]) -> None:
+    async def _process_batch(self, key: str, processor: Callable[[List[Dict]], List[Any]],
+                          batch: list = None) -> None:
         """处理一批请求"""
-        if self._processing[key]:
-            return
-
-        self._processing[key] = True
-
-        try:
+        if batch is None:
+            if self._processing.get(key):
+                return
+            self._processing[key] = True
             async with self._lock:
                 batch = self._pending[key][:self.batch_size]
                 self._pending[key] = self._pending[key][self.batch_size:]
 
-            if not batch:
-                return
+        if not batch:
+            self._processing[key] = False
+            return
 
-            logger.debug(f"处理批处理请求: key={key}, count={len(batch)}")
+        logger.debug(f"处理批处理请求: key={key}, count={len(batch)}")
 
-            # 提取请求数据
-            requests = [item["request"] for item in batch]
+        # 提取请求数据
+        requests = [item["request"] for item in batch]
 
-            # 调用处理器
-            try:
-                results = await asyncio.to_thread(processor, requests)
+        # 调用处理器
+        try:
+            results = await asyncio.to_thread(processor, requests)
 
-                # 分发结果
-                for item, result in zip(batch, results):
-                    if not item["future"].done():
-                        item["future"].set_result(result)
-            except Exception as e:
-                logger.error(f"批处理失败: {e}")
-                # 向所有等待的future传播错误
-                for item in batch:
-                    if not item["future"].done():
-                        item["future"].set_exception(e)
-
+            # 分发结果
+            for item, result in zip(batch, results):
+                if not item["future"].done():
+                    item["future"].set_result(result)
+        except Exception as e:
+            logger.error(f"批处理失败: {e}")
+            # 向所有等待的future传播错误
+            for item in batch:
+                if not item["future"].done():
+                    item["future"].set_exception(e)
         finally:
             self._processing[key] = False
 

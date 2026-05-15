@@ -3,13 +3,11 @@
 """
 
 import logging
-import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 from .llm_client import LLMClient
-from utils.cache_manager import cached
 from utils.input_validator import InputValidator, sanitize_input
 
 logger = logging.getLogger(__name__)

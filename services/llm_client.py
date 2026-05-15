@@ -224,7 +224,8 @@ class LLMClient:
     @staticmethod
     def get_custom_models() -> List[str]:
         """获取所有已注册的自定义模型名称"""
-        return list(_custom_model_configs.keys())
+        with _custom_model_lock:
+            return list(_custom_model_configs.keys())
 
     @staticmethod
     def get_all_models() -> List[str]:

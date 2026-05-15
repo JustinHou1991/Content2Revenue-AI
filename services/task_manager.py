@@ -6,7 +6,7 @@ import json
 import uuid
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -265,7 +265,14 @@ class BackgroundTaskManager:
 
         lead_snapshot_map = {}
         for lid, ld in lead_data_map.items():
-            lead_snapshot_map[lid] = orchestrator._build_lead_snapshot(ld)
+            profile = ld.get("profile_json", {})
+            lead_snapshot_map[lid] = {
+                "company_name": profile.get("company_name", "未知"),
+                "industry": profile.get("industry", "未知"),
+                "lead_grade": profile.get("lead_grade", "C"),
+                "intent_level": profile.get("intent_level", 5),
+                "lead_id": lid,
+            }
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
         import threading

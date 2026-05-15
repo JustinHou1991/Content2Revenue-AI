@@ -28,7 +28,6 @@ def _get_default_db_path() -> str:
     return "data/c2r.db"
 import json
 import logging
-import os
 import base64
 import hashlib
 import time
@@ -241,44 +240,46 @@ class Database:
             logger.info("Fernet不可用，跳过迁移")
             return 0
 
-        migrated = 0
         own_conn = conn is None
         try:
             if own_conn:
-                conn = self._get_conn()
+                with self._get_conn() as conn:
+                    return self._do_migrate_fernet(conn)
 
-            # 查找所有非Fernet加密的API_KEY记录
-            rows = conn.execute(
-                "SELECT key, value FROM app_settings WHERE key = 'API_KEY' AND value IS NOT NULL AND value != ''"
-            ).fetchall()
-
-            for row in rows:
-                raw_value = row["value"]
-                # 跳过已经是Fernet加密的数据
-                if raw_value.startswith(_FERNET_PREFIX):
-                    continue
-
-                # 尝试用XOR解密旧数据
-                decrypted = self._xor_decrypt(raw_value)
-                if decrypted and decrypted != raw_value:
-                    # 解密成功，用Fernet重新加密
-                    new_encrypted = self._encrypt_value(decrypted)
-                else:
-                    # 可能是明文数据，也用Fernet加密保护
-                    new_encrypted = self._encrypt_value(raw_value)
-
-                now = datetime.now().isoformat()
-                conn.execute(
-                    "UPDATE app_settings SET value = ?, updated_at = ? WHERE key = ?",
-                    (new_encrypted, now, row["key"]),
-                )
-                migrated += 1
-                logger.info("已迁移加密数据: key=%s", row["key"])
+            return self._do_migrate_fernet(conn)
         except Exception as e:
             logger.error("加密数据迁移失败: %s", e)
+            return 0
+
+    def _do_migrate_fernet(self, conn) -> int:
+        """执行 Fernet 迁移的实际数据库操作"""
+        migrated = 0
+        rows = conn.execute(
+            "SELECT key, value FROM app_settings WHERE key = 'API_KEY' AND value IS NOT NULL AND value != ''"
+        ).fetchall()
+
+        for row in rows:
+            raw_value = row["value"]
+            if raw_value.startswith(_FERNET_PREFIX):
+                continue
+
+            decrypted = self._xor_decrypt(raw_value)
+            if decrypted and decrypted != raw_value:
+                new_encrypted = self._encrypt_value(decrypted)
+            else:
+                new_encrypted = self._encrypt_value(raw_value)
+
+            now = datetime.now().isoformat()
+            conn.execute(
+                "UPDATE app_settings SET value = ?, updated_at = ? WHERE key = ?",
+                (new_encrypted, now, row["key"]),
+            )
+            migrated += 1
+            logger.info("已迁移加密数据: key=%s", row["key"])
 
         if migrated > 0:
-            logger.info("加密迁移完成，共迁移 %d 条记录", migrated)
+            conn.commit()
+            logger.info("加密数据迁移完成，共迁移 %d 条记录", migrated)
         return migrated
 
     def _init_tables(self) -> None:

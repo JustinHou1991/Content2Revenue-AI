@@ -470,8 +470,8 @@ class PDFReportGenerator:
         story.append(Spacer(1, 2 * cm))
 
         # 基本信息
-        content_snapshot = match_result.get("content_snapshot", {})
-        lead_snapshot = match_result.get("lead_snapshot", {})
+        content_snapshot = match_result.get("content_snapshot") or {}
+        lead_snapshot = match_result.get("lead_snapshot") or {}
 
         info_data = [
             ["内容标题", str(content_snapshot.get("title", "N/A"))[:50]],
