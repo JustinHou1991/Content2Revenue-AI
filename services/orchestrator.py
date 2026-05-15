@@ -149,13 +149,13 @@ class Orchestrator:
         return strategy
 
     def batch_generate_strategies(
-        self, match_ids: Optional[List[str]] = None, max_workers: int = 10
+        self, match_ids: Optional[List[str]] = None, max_workers: int = 4
     ) -> List[Dict[str, Any]]:
         """批量生成策略建议（并发优化版）
 
         Args:
             match_ids: 匹配结果ID列表，为None时自动获取所有匹配结果
-            max_workers: 并发线程数
+            max_workers: 并发线程数，默认4（策略生成较重，不宜过高）
 
         Returns:
             策略生成结果列表（含成功/失败标记）
@@ -172,6 +172,7 @@ class Orchestrator:
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
         import threading
+        import time
 
         total = len(match_ids)
         results = [None] * total
@@ -179,12 +180,22 @@ class Orchestrator:
         lock = threading.Lock()
 
         def generate_one(index: int, match_id: str):
-            try:
-                strategy = self.generate_strategy(match_id)
-                return index, {"success": True, "data": strategy, "match_id": match_id}
-            except Exception as e:
-                logger.error("策略生成失败 match_id=%s: %s", match_id, e)
-                return index, {"success": False, "error": str(e), "match_id": match_id}
+            retries = 3
+            delay = 1
+            for attempt in range(retries):
+                try:
+                    strategy = self.generate_strategy(match_id)
+                    return index, {"success": True, "data": strategy, "match_id": match_id}
+                except Exception as e:
+                    if "频率超限" in str(e) or "rate limit" in str(e).lower() or "429" in str(e):
+                        if attempt < retries - 1:
+                            logger.warning("策略生成限流 match_id=%s, 等待 %ds 后重试 (%d/%d)",
+                                           match_id, delay, attempt + 1, retries)
+                            time.sleep(delay)
+                            delay *= 2
+                            continue
+                    logger.error("策略生成失败 match_id=%s: %s", match_id, e)
+                    return index, {"success": False, "error": str(e), "match_id": match_id}
 
         actual_workers = min(max_workers, total)
         with ThreadPoolExecutor(max_workers=actual_workers) as executor:
