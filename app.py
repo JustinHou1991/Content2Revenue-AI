@@ -38,7 +38,7 @@ logger = get_logger(__name__)
 # ============================================================
 # 固化模型配置（免费API Key，仅用于展示测试）
 # ============================================================
-DEFAULT_MODEL = os.environ.get("C2R_DEFAULT_MODEL", "LongCat-Flash-Lite")
+DEFAULT_MODEL = os.environ.get("C2R_DEFAULT_MODEL", "LongCat-2.0-Preview")
 DEFAULT_API_KEY = os.environ.get("C2R_API_KEY", "ak_28d06A0NE4BA8hu9ok17L5Nj3pt5N")
 
 # 初始化session state

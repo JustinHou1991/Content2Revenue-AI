@@ -300,7 +300,7 @@ class MatchEngine(BaseAnalyzer):
         contents: List[Dict[str, Any]],
         leads: List[Dict[str, Any]],
         top_k: int = 3,
-        max_workers: int = 3,
+        max_workers: int = 8,
     ) -> List[Dict[str, Any]]:
         """批量匹配：每个线索找到最合适的top_k个内容（并发优化版）
 
@@ -308,7 +308,7 @@ class MatchEngine(BaseAnalyzer):
             contents: ContentAnalyzer输出列表（每个含analysis字段，可选content_id字段）
             leads: LeadAnalyzer输出列表（每个含profile字段，可选lead_id和raw_data字段）
             top_k: 每个线索返回的匹配内容数量
-            max_workers: 并发线程数，默认3，避免LLM API限流
+            max_workers: 并发线程数，默认8
 
         Returns:
             匹配结果列表（顺序与输入leads顺序一致）

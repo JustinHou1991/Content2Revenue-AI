@@ -377,16 +377,14 @@ class LeadAnalysisPage(AnalysisPage):
         completed = 0
         completed_lock = threading.Lock()
 
-        max_workers = min(5, total)
+        max_workers = min(10, total)
 
         def analyze_one(index: int, lead: dict):
-            nonlocal completed
             try:
                 result = orchestrator.lead_analyzer.analyze(
                     lead_data=lead.get("lead_data", {}),
                     lead_id=lead.get("lead_id"),
                 )
-                orchestrator.db.save_lead_analysis(result)
                 return index, {"success": True, "data": result}
             except Exception as e:
                 logger.error(f"线索分析失败 (item {index+1}/{total}): {e}")
@@ -409,6 +407,12 @@ class LeadAnalysisPage(AnalysisPage):
                 status_text.info(f"⏳ 已完成 {completed}/{total} 条")
 
         progress_bar.empty()
+        status_text.empty()
+
+        successful_results = [r["data"] for r in results if r and r.get("success")]
+        if successful_results:
+            status_text.info(f"正在保存 {len(successful_results)} 条结果到数据库...")
+            orchestrator.db.save_lead_analyses_batch(successful_results)
         status_text.empty()
 
         state = {

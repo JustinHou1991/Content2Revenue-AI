@@ -53,7 +53,7 @@ class BackgroundTaskManager:
             self.db = db
             self.model = model
             self.api_key = api_key
-            self._executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="bg_task_")
+            self._executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="bg_task_")
             self._running_tasks: Dict[str, Future] = {}
             self._task_callbacks: Dict[str, List[Callable]] = {}
             self._lock = threading.Lock()

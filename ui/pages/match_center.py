@@ -217,7 +217,24 @@ class MatchCenterPage(MatchPage):
             match_results_to_save = []
             completed = 0
             completed_lock = threading.Lock()
-            max_workers = min(5, total_leads)
+            max_workers = min(8, total_leads)
+
+            lead_data_map = {}
+            all_lead_data = orchestrator.db.get_all_lead_analyses(limit=total_leads + 100)
+            for ld in all_lead_data:
+                lead_data_map[ld.get("id", "")] = ld
+
+            for item in lead_list:
+                lid = item["lead_id"]
+                if lid not in lead_data_map:
+                    lead_data_map[lid] = {
+                        "profile_json": item["profile"],
+                        "raw_data_json": item.get("raw_data", {}),
+                    }
+
+            lead_snapshot_map = {}
+            for lid, ld in lead_data_map.items():
+                lead_snapshot_map[lid] = orchestrator._build_lead_snapshot(ld)
 
             def match_one_lead(index: int, lead_data_item: dict):
                 try:
@@ -245,10 +262,7 @@ class MatchCenterPage(MatchPage):
                     )
                     top_matches = matches[:top_k]
 
-                    lead_data = orchestrator.db.get_lead_analysis(lead_id)
-                    lead_snapshot = orchestrator._build_lead_snapshot(
-                        lead_data or {"profile_json": lead_data_item["profile"], "raw_data_json": lead_data_item.get("raw_data", {})}
-                    )
+                    lead_snapshot = lead_snapshot_map.get(lead_id, {})
 
                     result_item = {
                         "lead_id": lead_id,
