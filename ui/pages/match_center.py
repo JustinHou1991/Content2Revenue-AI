@@ -6,7 +6,6 @@
 
 import streamlit as st
 import logging
-import threading
 
 logger = logging.getLogger(__name__)
 
@@ -186,130 +185,12 @@ class MatchCenterPage(MatchPage):
                 return
 
             total_leads = len(leads)
+            total_tasks = len(contents) * len(leads)
             st.warning("⚠️ **匹配中，请勿切换页面**，完成后将自动显示结果。")
-            st.info(f"共 {total_leads} 条线索，并发匹配中...")
+            st.info(f"共 {total_leads} 条线索 × {len(contents)} 条内容 = {total_tasks} 次匹配，并发处理中...")
 
-            progress_bar = st.empty()
-            status_text = st.empty()
-
-            def _safe_progress(val, text):
-                try:
-                    progress_bar.progress(val, text=text)
-                except TypeError:
-                    progress_bar.progress(val)
-                    status_text.info(text)
-
-            _safe_progress(0, f"准备匹配 {total_leads} 条线索...")
-
-            content_list = [
-                {"analysis": c["analysis_json"], "content_id": c["id"]} for c in contents
-            ]
-            lead_list = [
-                {
-                    "profile": lead["profile_json"],
-                    "lead_id": lead["id"],
-                    "raw_data": lead.get("raw_data_json", {}),
-                }
-                for lead in leads
-            ]
-
-            results = [None] * total_leads
-            match_results_to_save = []
-            completed = 0
-            completed_lock = threading.Lock()
-            max_workers = min(8, total_leads)
-
-            lead_data_map = {}
-            all_lead_data = orchestrator.db.get_all_lead_analyses(limit=total_leads + 100)
-            for ld in all_lead_data:
-                lead_data_map[ld.get("id", "")] = ld
-
-            for item in lead_list:
-                lid = item["lead_id"]
-                if lid not in lead_data_map:
-                    lead_data_map[lid] = {
-                        "profile_json": item["profile"],
-                        "raw_data_json": item.get("raw_data", {}),
-                    }
-
-            lead_snapshot_map = {}
-            for lid, ld in lead_data_map.items():
-                lead_snapshot_map[lid] = orchestrator._build_lead_snapshot(ld)
-
-            def match_one_lead(index: int, lead_data_item: dict):
-                try:
-                    lead_id = lead_data_item["lead_id"]
-                    matches = []
-                    for content_item in content_list:
-                        try:
-                            match_result = orchestrator.match_engine.match(
-                                content_item["analysis"],
-                                lead_data_item["profile"],
-                                content_id=content_item.get("content_id"),
-                                lead_id=lead_id,
-                            )
-                            matches.append({
-                                "content_id": content_item.get("content_id"),
-                                "content_snapshot": match_result.get("content_snapshot", {}),
-                                "match_result": match_result.get("match_result", {}),
-                            })
-                        except Exception as e:
-                            logger.error(f"单条匹配失败 lead={lead_id}: {e}")
-
-                    matches.sort(
-                        key=lambda m: m.get("match_result", {}).get("overall_score", 0),
-                        reverse=True,
-                    )
-                    top_matches = matches[:top_k]
-
-                    lead_snapshot = lead_snapshot_map.get(lead_id, {})
-
-                    result_item = {
-                        "lead_id": lead_id,
-                        "lead_snapshot": lead_snapshot,
-                        "top_matches": top_matches,
-                    }
-
-                    matches_to_save = []
-                    for match in top_matches:
-                        if "error" not in match:
-                            import uuid
-                            match["match_id"] = str(uuid.uuid4())
-                            match.setdefault("content_snapshot", {})["content_id"] = match.get("content_id", "")
-                            match.setdefault("lead_snapshot", {})["lead_id"] = lead_id
-                            matches_to_save.append(match)
-
-                    return index, result_item, matches_to_save, None
-                except Exception as e:
-                    logger.error(f"匹配任务失败 (lead {index+1}/{total_leads}): {e}")
-                    return index, None, [], str(e)
-
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(match_one_lead, i, lead_list[i]): i
-                    for i in range(total_leads)
-                }
-                for future in as_completed(futures):
-                    idx, result_item, to_save, error = future.result()
-                    results[idx] = result_item
-                    if result_item:
-                        match_results_to_save.extend(to_save)
-                    with completed_lock:
-                        completed += 1
-                    pct = int(completed / total_leads * 100)
-                    _safe_progress(pct / 100, f"匹配中 {completed}/{total_leads} ({pct}%)")
-                    status_text.info(f"⏳ 已完成 {completed}/{total_leads} 条")
-
-            progress_bar.empty()
-            status_text.empty()
-
-            if match_results_to_save:
-                try:
-                    orchestrator.db.save_match_results_batch(match_results_to_save)
-                except Exception as e:
-                    logger.error(f"批量保存匹配结果失败: {e}")
+            with st.spinner(f"正在并发匹配 {total_tasks} 对内容-线索组合..."):
+                results = orchestrator.batch_match(top_k)
 
             valid_results = [r for r in results if r is not None]
             self._render_batch_match_results(valid_results)

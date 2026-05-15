@@ -94,6 +94,18 @@ class StrategyPage(BasePage):
                     callout(f"策略生成失败: {str(e)}", type="error")
                     st.info("请检查匹配结果是否有效，或稍后重试。")
 
+        divider()
+        st.subheader("批量生成全部策略")
+
+        batch_btn = st.button(
+            f"批量生成策略（{len(match_results)} 条匹配）",
+            type="primary",
+            use_container_width=True,
+            key="batch_generate_strategies",
+        )
+        if batch_btn:
+            self._handle_batch_strategy(match_results)
+
         # 历史策略
         divider()
         self._render_history()
@@ -270,6 +282,58 @@ class StrategyPage(BasePage):
         # 策略反馈表单
         divider()
         self._render_feedback_form(result)
+
+    def _handle_batch_strategy(self, match_results: list):
+        """批量生成策略（并发优化）"""
+        match_ids = [m["id"] for m in match_results]
+        total = len(match_ids)
+
+        st.warning("⚠️ **策略生成中，请勿切换页面**，完成后将自动显示结果。")
+        st.info(f"共 {total} 条匹配结果，并发生成策略中...")
+
+        progress_bar = st.empty()
+        status_text = st.empty()
+
+        def _safe_progress(val, text):
+            try:
+                progress_bar.progress(val, text=text)
+            except TypeError:
+                progress_bar.progress(val)
+                status_text.info(text)
+
+        _safe_progress(0, f"准备生成 {total} 条策略...")
+
+        results = self._get_orchestrator().batch_generate_strategies(match_ids)
+
+        progress_bar.empty()
+        status_text.empty()
+
+        success_count = sum(1 for r in results if r and r.get("success"))
+        fail_count = total - success_count
+
+        msg = f"批量策略生成完成！成功 {success_count}/{total} 条"
+        if fail_count > 0:
+            msg += f"（{fail_count} 条失败）"
+        callout(msg, type="success", icon="✅")
+
+        divider()
+        st.subheader("✅ 当前生成结果")
+
+        for i, r in enumerate(results):
+            if r and r.get("success"):
+                data = r.get("data", {})
+                sid = data.get("strategy_id", "")[:8]
+                strategy = data.get("strategy", {})
+                cs = strategy.get("content_strategy", {})
+                hook = cs.get("recommended_hook", "未知")
+                with st.expander(
+                    f"#{i+1} [{sid}] - {hook}"
+                ):
+                    self._display_strategy(data)
+            else:
+                err = r.get("error", "未知错误") if r else "未知错误"
+                with st.expander(f"匹配 #{i+1} - 生成失败"):
+                    st.error(err)
 
     def _render_feedback_form(self, result: dict):
         """渲染策略反馈表单"""

@@ -249,46 +249,89 @@ class BackgroundTaskManager:
         
         results = []
         match_results_to_save = []
-        
-        for i, lead_data_item in enumerate(lead_list):
+
+        lead_data_map = {}
+        all_lead_data = orchestrator.db.get_all_lead_analyses(limit=total_leads + 100)
+        for ld in all_lead_data:
+            lead_data_map[ld.get("id", "")] = ld
+
+        for item in lead_list:
+            lid = item["lead_id"]
+            if lid not in lead_data_map:
+                lead_data_map[lid] = {
+                    "profile_json": item["profile"],
+                    "raw_data_json": item.get("raw_data", {}),
+                }
+
+        lead_snapshot_map = {}
+        for lid, ld in lead_data_map.items():
+            lead_snapshot_map[lid] = orchestrator._build_lead_snapshot(ld)
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        tasks = []
+        for lead_idx, lead_data_item in enumerate(lead_list):
             lead_id = lead_data_item["lead_id"]
-            
-            self._update_task_progress(task_id, i, total_leads, max(5, int(i / total_leads * 90)))
-            
-            matches = []
             for content_item in content_list:
-                try:
-                    match_result = orchestrator.match_engine.match(
-                        content_item["analysis"],
-                        lead_data_item["profile"],
-                        content_id=content_item.get("content_id"),
-                        lead_id=lead_id,
-                    )
-                    matches.append({
-                        "content_id": content_item.get("content_id"),
-                        "content_snapshot": match_result.get("content_snapshot", {}),
-                        "match_result": match_result.get("match_result", {}),
-                    })
-                except Exception as e:
-                    logger.error(f"匹配失败 lead={lead_id}: {e}")
-                    matches.append({"error": str(e)})
-            
+                tasks.append((lead_idx, lead_id, lead_data_item, content_item))
+
+        total_tasks = len(tasks)
+        matches_by_lead = {i: [] for i in range(total_leads)}
+        completed = 0
+        lock = threading.Lock()
+
+        def do_match(lead_idx, lead_id, lead_data_item, content_item):
+            nonlocal completed
+            try:
+                match_result = orchestrator.match_engine.match(
+                    content_item["analysis"],
+                    lead_data_item["profile"],
+                    content_id=content_item.get("content_id"),
+                    lead_id=lead_id,
+                )
+                return lead_idx, {
+                    "content_id": content_item.get("content_id"),
+                    "content_snapshot": match_result.get("content_snapshot", {}),
+                    "match_result": match_result.get("match_result", {}),
+                }
+            except Exception as e:
+                logger.error(f"匹配失败 lead={lead_id}: {e}")
+                return lead_idx, {"error": str(e)}
+
+        max_workers = min(8, total_tasks)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(do_match, lead_idx, lead_id, lead_data_item, content_item)
+                for lead_idx, lead_id, lead_data_item, content_item in tasks
+            ]
+            for future in as_completed(futures):
+                lead_idx, match = future.result()
+                with lock:
+                    matches_by_lead[lead_idx].append(match)
+                    completed += 1
+                if completed % 50 == 0 or completed == total_tasks:
+                    pct = int(completed / total_tasks * 90)
+                    self._update_task_progress(task_id, completed, total_tasks, max(5, pct))
+
+        for lead_idx, lead_data_item in enumerate(lead_list):
+            lead_id = lead_data_item["lead_id"]
+            matches = matches_by_lead.get(lead_idx, [])
+
             matches.sort(
                 key=lambda m: m.get("match_result", {}).get("overall_score", 0),
                 reverse=True,
             )
             top_matches = matches[:top_k]
-            
-            lead_snapshot = orchestrator._build_lead_snapshot(
-                orchestrator.db.get_lead_analysis(lead_id) or {"profile_json": lead_data_item["profile"], "raw_data_json": lead_data_item.get("raw_data", {})}
-            )
-            
+
+            lead_snapshot = lead_snapshot_map.get(lead_id, {})
+
             results.append({
                 "lead_id": lead_id,
                 "lead_snapshot": lead_snapshot,
                 "top_matches": top_matches,
             })
-            
+
             for match in top_matches:
                 if "error" not in match and "match_id" not in match:
                     import uuid
@@ -297,8 +340,8 @@ class BackgroundTaskManager:
                     match.setdefault("content_snapshot", {})["content_id"] = match.get("content_id", "")
                     match.setdefault("lead_snapshot", {})["lead_id"] = lead_id
                     match_results_to_save.append(match)
-            
-            self._update_task_progress(task_id, i + 1, total_leads, int((i + 1) / total_leads * 90))
+
+            self._update_task_progress(task_id, lead_idx + 1, total_leads, int((lead_idx + 1) / total_leads * 90))
         
         if match_results_to_save:
             try:

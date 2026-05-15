@@ -148,6 +148,60 @@ class Orchestrator:
         logger.info("策略生成完成, strategy_id=%s", strategy.get("strategy_id"))
         return strategy
 
+    def batch_generate_strategies(
+        self, match_ids: Optional[List[str]] = None, max_workers: int = 10
+    ) -> List[Dict[str, Any]]:
+        """批量生成策略建议（并发优化版）
+
+        Args:
+            match_ids: 匹配结果ID列表，为None时自动获取所有匹配结果
+            max_workers: 并发线程数
+
+        Returns:
+            策略生成结果列表（含成功/失败标记）
+        """
+        if match_ids is None:
+            all_matches = self.db.get_all_match_results(limit=500)
+            match_ids = [m["id"] for m in all_matches]
+
+        if not match_ids:
+            logger.warning("没有可用的匹配结果，跳过批量策略生成")
+            return []
+
+        logger.info("开始批量策略生成: %d 条匹配结果, max_workers=%d", len(match_ids), max_workers)
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        total = len(match_ids)
+        results = [None] * total
+        completed = 0
+        lock = threading.Lock()
+
+        def generate_one(index: int, match_id: str):
+            try:
+                strategy = self.generate_strategy(match_id)
+                return index, {"success": True, "data": strategy, "match_id": match_id}
+            except Exception as e:
+                logger.error("策略生成失败 match_id=%s: %s", match_id, e)
+                return index, {"success": False, "error": str(e), "match_id": match_id}
+
+        actual_workers = min(max_workers, total)
+        with ThreadPoolExecutor(max_workers=actual_workers) as executor:
+            futures = {
+                executor.submit(generate_one, i, match_ids[i]): i
+                for i in range(total)
+            }
+            for future in as_completed(futures):
+                idx, result = future.result()
+                results[idx] = result
+                with lock:
+                    completed += 1
+
+        success_count = sum(1 for r in results if r and r.get("success"))
+        logger.info("批量策略生成完成: 成功=%d/%d", success_count, total)
+        return results
+
     def full_pipeline(
         self, script_text: str, lead_data: Dict[str, Any]
     ) -> Dict[str, Any]:
