@@ -89,7 +89,7 @@ class StrategyPage(BasePage):
             with st.spinner("AI正在生成策略建议..."):
                 try:
                     result = self._get_orchestrator().generate_strategy(match_id)
-                    self._display_strategy(result)
+                    self._display_strategy(result, key_prefix="single")
                 except Exception as e:
                     callout(f"策略生成失败: {str(e)}", type="error")
                     st.info("请检查匹配结果是否有效，或稍后重试。")
@@ -110,10 +110,11 @@ class StrategyPage(BasePage):
         divider()
         self._render_history()
 
-    def _display_strategy(self, result: dict):
+    def _display_strategy(self, result: dict, key_prefix: str = "strategy"):
         """展示策略建议"""
         strategy = result.get("strategy", {})
         strategy_id = result.get("strategy_id", "")[:8]
+        kp = f"{key_prefix}_{strategy_id}"
 
         callout(f"策略建议已生成！ID: {strategy_id}...", type="success", icon="✅")
 
@@ -168,7 +169,7 @@ class StrategyPage(BasePage):
             st.markdown("**推荐Hook:**")
             hook = cs.get("recommended_hook", "")
             st.code(hook, language=None)
-            if st.button("复制Hook", key="copy_hook"):
+            if st.button("复制Hook", key=f"{kp}_copy_hook"):
                 try:
                     st.clipboard_copy(hook)
                     st.toast("已复制！")
@@ -269,7 +270,7 @@ class StrategyPage(BasePage):
         divider()
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("复制完整策略", key="copy_full"):
+            if st.button("复制完整策略", key=f"{kp}_copy_full"):
                 try:
                     st.clipboard_copy(json.dumps(strategy, ensure_ascii=False, indent=2))
                     st.toast("已复制到剪贴板！")
@@ -329,7 +330,7 @@ class StrategyPage(BasePage):
                 with st.expander(
                     f"#{i+1} [{sid}] - {hook}"
                 ):
-                    self._display_strategy(data)
+                    self._display_strategy(data, key_prefix=f"batch_{i}")
             else:
                 err = r.get("error", "未知错误") if r else "未知错误"
                 with st.expander(f"匹配 #{i+1} - 生成失败"):
