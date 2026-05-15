@@ -15,6 +15,10 @@ def _esc(value: str) -> str:
     return html.escape(str(value))
 
 
+def _icon(value: str) -> str:
+    return value
+
+
 def _html(html_str: str) -> None:
     """安全渲染 HTML 字符串。
 
@@ -192,7 +196,7 @@ def data_card(
     <div class="c2r-data-card c2r-animate-scale-in" style="{border_style}">
         <div class="c2r-data-card-header">
             <div class="c2r-data-card-title">
-                {icon_html}{_esc(title)}
+                {icon_html}{_icon(title)}
             </div>
             {actions_html}
         </div>
@@ -283,7 +287,7 @@ def empty_state(
             action_callback=lambda: st.session_state.page = "create"
         )
     """
-    icon_display = icon if icon else "&#9744;"
+    icon_display = icon if icon else "☐"
 
     html = f"""
     <div class="c2r-empty-state c2r-animate-fade-in">
@@ -569,10 +573,10 @@ def callout(
     bg_color, text_color = color_map.get(type, color_map["info"])
 
     default_icons = {
-        "info": "&#8505;",
-        "success": "&#10003;",
-        "warning": "&#9888;",
-        "error": "&#10007;",
+        "info": "ℹ️",
+        "success": "✅",
+        "warning": "⚠️",
+        "error": "❌",
     }
 
     display_icon = icon if icon else default_icons.get(type, "")
@@ -602,7 +606,7 @@ def callout(
 def sidebar_logo(
     name: str = "Content2Revenue",
     subtitle: str = "AI",
-    icon: str = "&#9670;",
+    icon: str = "◆",
 ) -> None:
     """
     侧边栏 Logo 展示组件。
@@ -658,7 +662,7 @@ def sidebar_nav(
 
         html = f"""
         <div class="c2r-nav-item {active_class}">
-            <span>{_esc(item.get("icon", ""))}</span>
+            <span>{_icon(item.get("icon", ""))}</span>
             <span>{_esc(item.get("label", ""))}</span>
         </div>
         """

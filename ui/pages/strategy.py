@@ -34,7 +34,7 @@ class StrategyPage(BasePage):
     def __init__(self):
         super().__init__(
             title="AI策略建议",
-            icon="&#128161;",
+            icon="💡",
             description="基于匹配结果，生成具体可执行的内容策略、分发策略、转化预测和A/B测试建议"
         )
 
@@ -103,7 +103,7 @@ class StrategyPage(BasePage):
         strategy = result.get("strategy", {})
         strategy_id = result.get("strategy_id", "")[:8]
 
-        callout(f"策略建议已生成！ID: {strategy_id}...", type="success", icon="&#10003;")
+        callout(f"策略建议已生成！ID: {strategy_id}...", type="success", icon="✅")
 
         # 顶部：内容和线索摘要（让用户知道是为谁生成的策略）
         match_id = result.get("match_id", "")
@@ -206,21 +206,21 @@ class StrategyPage(BasePage):
             metric_card(
                 title="预估转化率",
                 value=cp.get("estimated_conversion_rate", "未知"),
-                icon="&#128200;",
+                icon="📈",
                 border_color="#10B981",
             )
         with col2:
             metric_card(
                 title="置信度",
                 value=cp.get("confidence_level", "未知"),
-                icon="&#128170;",
+                icon="💪",
                 border_color="#6366F1",
             )
         with col3:
             metric_card(
                 title="建议样本量",
                 value=cp.get("recommended_sample_size", "未知"),
-                icon="&#128202;",
+                icon="📊",
                 border_color="#F59E0B",
             )
 
@@ -281,7 +281,7 @@ class StrategyPage(BasePage):
             existing_feedback = None
 
         if existing_feedback:
-            callout("您已提交过反馈", type="success", icon="&#10003;")
+            callout("您已提交过反馈", type="success", icon="✅")
             col1, col2 = st.columns(2)
             with col1:
                 adopted = "已采纳" if existing_feedback.get("was_adopted") else "未采纳"
@@ -335,7 +335,7 @@ class StrategyPage(BasePage):
                         ),
                         feedback_notes=feedback_notes if feedback_notes else None,
                     )
-                    callout("反馈提交成功！感谢您的参与。", type="success", icon="&#127881;")
+                    callout("反馈提交成功！感谢您的参与。", type="success", icon="🎉")
                     st.balloons()
                     st.rerun()
                 except Exception as e:
@@ -434,14 +434,14 @@ class StrategyPage(BasePage):
                                 metric_card(
                                     title="预估转化率",
                                     value=conv_rate,
-                                    icon="&#128200;",
+                                    icon="📈",
                                     border_color="#10B981",
                                 )
                             with col2:
                                 metric_card(
                                     title="置信度",
                                     value=confidence,
-                                    icon="&#128170;",
+                                    icon="💪",
                                     border_color="#6366F1",
                                 )
                             with col3:
@@ -449,7 +449,7 @@ class StrategyPage(BasePage):
                                 metric_card(
                                     title="建议样本量",
                                     value=sample,
-                                    icon="&#128202;",
+                                    icon="📊",
                                     border_color="#F59E0B",
                                 )
 
@@ -508,7 +508,7 @@ class StrategyPage(BasePage):
                 empty_state(
                     title="暂无策略建议记录",
                     description="请先选择匹配结果生成策略",
-                    icon="&#128161;",
+                    icon="💡",
                 )
         except Exception as e:
             callout(f"加载失败: {str(e)}", type="error")

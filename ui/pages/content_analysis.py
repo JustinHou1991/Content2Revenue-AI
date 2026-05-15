@@ -36,7 +36,7 @@ class ContentAnalysisPage(AnalysisPage):
     def __init__(self):
         super().__init__(
             title="内容智能分析",
-            icon="&#128221;",
+            icon="📱",
             description="分析抖音脚本，提取Hook类型、情感基调、叙事结构、CTA等特征",
             page_prefix="content"
         )
@@ -319,10 +319,10 @@ class ContentAnalysisPage(AnalysisPage):
             msg += f"（{fail_count} 条失败）"
         if db_count >= 0:
             msg += f" | 数据库共 {db_count} 条记录"
-        callout(msg, type="success", icon="&#10003;")
+        callout(msg, type="success", icon="✅")
 
         divider()
-        st.subheader("分析结果")
+        st.subheader("✅ 当前完成结果")
 
         for i, r in enumerate(results):
             if r.get("success"):
@@ -564,7 +564,7 @@ class ContentAnalysisPage(AnalysisPage):
         analysis = result["analysis"]
         content_id = result["content_id"]
 
-        callout(f"分析完成！ID: {content_id[:8]}...", type="success", icon="&#10003;")
+        callout(f"分析完成！ID: {content_id[:8]}...", type="success", icon="✅")
 
         # 核心指标
         col1, col2, col3 = st.columns(3)
@@ -573,7 +573,7 @@ class ContentAnalysisPage(AnalysisPage):
                 title="综合评分",
                 value=f"{analysis.get('content_score', 'N/A')}/10",
                 subtitle="综合转化潜力评分",
-                icon="&#128202;",
+                icon="📊",
                 border_color="#6366F1",
             )
         with col2:
@@ -581,7 +581,7 @@ class ContentAnalysisPage(AnalysisPage):
                 title="Hook强度",
                 value=f"{analysis.get('hook_strength', 'N/A')}/10",
                 subtitle="开场钩子吸引力",
-                icon="&#127908;",
+                icon="🎬",
                 border_color="#10B981",
             )
         with col3:
@@ -589,7 +589,7 @@ class ContentAnalysisPage(AnalysisPage):
                 title="CTA清晰度",
                 value=f"{analysis.get('cta_clarity', 'N/A')}/10",
                 subtitle="行动号召清晰程度",
-                icon="&#128227;",
+                icon="📢",
                 border_color="#F59E0B",
             )
 
@@ -632,7 +632,7 @@ class ContentAnalysisPage(AnalysisPage):
                 empty_state(
                     title="暂无历史记录",
                     description="去上方输入脚本开始分析吧！",
-                    icon="&#128218;",
+                    icon="📚",
                 )
                 return
 
@@ -646,7 +646,7 @@ class ContentAnalysisPage(AnalysisPage):
                 empty_state(
                     title="暂无历史记录",
                     description="没有找到匹配的记录。",
-                    icon="&#128218;",
+                    icon="📚",
                 )
                 return
 

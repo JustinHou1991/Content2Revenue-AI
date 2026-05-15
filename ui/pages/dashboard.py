@@ -31,7 +31,7 @@ def render_dashboard():
         callout(
             "请先在「系统设置」中配置API Key。配置好API Key后，系统会自动保存配置，刷新页面也不会丢失。",
             type="warning",
-            icon="&#9888;",
+            icon="⚠️",
         )
 
     # 加载业务数据（仅在已初始化时）
@@ -42,7 +42,7 @@ def render_dashboard():
             data = st.session_state.orchestrator.get_dashboard_data()
             stats = data["stats"]
         except Exception as e:
-            callout(f"加载失败: {str(e)}", type="error", icon="&#10007;")
+            callout(f"加载失败: {str(e)}", type="error", icon="❌")
             st.info("如果是首次使用，请先在「系统设置」中配置API Key并加载示例数据。")
             stats = None
 
@@ -53,7 +53,7 @@ def render_dashboard():
                 "title": "已分析内容",
                 "value": str(stats["content_count"]),
                 "subtitle": "篇内容",
-                "icon": "&#128221;",
+                "icon": "📝",
                 "trend": "up",
                 "border_color": COLORS.get("brand_primary", "#6366F1"),
             },
@@ -61,7 +61,7 @@ def render_dashboard():
                 "title": "已分析线索",
                 "value": str(stats["lead_count"]),
                 "subtitle": "条线索",
-                "icon": "&#128100;",
+                "icon": "👤",
                 "trend": "up",
                 "border_color": "#10B981",
             },
@@ -69,7 +69,7 @@ def render_dashboard():
                 "title": "匹配次数",
                 "value": str(stats["match_count"]),
                 "subtitle": "次匹配",
-                "icon": "&#127919;",
+                "icon": "🎯",
                 "trend": "up",
                 "border_color": "#F59E0B",
             },
@@ -77,7 +77,7 @@ def render_dashboard():
                 "title": "策略报告",
                 "value": str(stats["strategy_count"]),
                 "subtitle": "份报告",
-                "icon": "&#128200;",
+                "icon": "📈",
                 "trend": "up",
                 "border_color": "#3B82F6",
             },
@@ -89,7 +89,7 @@ def render_dashboard():
                 "title": "已分析内容",
                 "value": "-",
                 "subtitle": "篇内容",
-                "icon": "&#128221;",
+                "icon": "📝",
                 "trend": "neutral",
                 "border_color": COLORS.get("brand_primary", "#6366F1"),
             },
@@ -97,7 +97,7 @@ def render_dashboard():
                 "title": "已分析线索",
                 "value": "-",
                 "subtitle": "条线索",
-                "icon": "&#128100;",
+                "icon": "👤",
                 "trend": "neutral",
                 "border_color": "#10B981",
             },
@@ -105,7 +105,7 @@ def render_dashboard():
                 "title": "匹配次数",
                 "value": "-",
                 "subtitle": "次匹配",
-                "icon": "&#127919;",
+                "icon": "🎯",
                 "trend": "neutral",
                 "border_color": "#F59E0B",
             },
@@ -113,7 +113,7 @@ def render_dashboard():
                 "title": "策略报告",
                 "value": "-",
                 "subtitle": "份报告",
-                "icon": "&#128200;",
+                "icon": "📈",
                 "trend": "neutral",
                 "border_color": "#3B82F6",
             },
@@ -160,21 +160,21 @@ def render_dashboard():
             "title": "平均内容评分",
             "value": f"{data['avg_content_score_recent']}/10",
             "subtitle": f"最近 {score_basis} 条",
-            "icon": "&#128202;",
+            "icon": "📊",
             "trend": "neutral",
         },
         {
             "title": "平均线索评分",
             "value": f"{data['avg_lead_score_recent']}/100",
             "subtitle": f"最近 {score_basis} 条",
-            "icon": "&#128101;",
+            "icon": "🗂️",
             "trend": "neutral",
         },
         {
             "title": "平均匹配度",
             "value": f"{data['avg_match_score_recent']}/10",
             "subtitle": f"最近 {score_basis} 条",
-            "icon": "&#127919;",
+            "icon": "🎯",
             "trend": "neutral",
         },
     ], columns=3)

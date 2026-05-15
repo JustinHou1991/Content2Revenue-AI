@@ -35,7 +35,7 @@ class LeadAnalysisPage(AnalysisPage):
     def __init__(self):
         super().__init__(
             title="线索智能分析",
-            icon="&#128100;",
+            icon="👤",
             description="分析销售线索，构建客户画像：行业、痛点、购买阶段、意向度等",
             page_prefix="lead"
         )
@@ -418,10 +418,10 @@ class LeadAnalysisPage(AnalysisPage):
         msg = f"批量分析完成！成功 {success_count}/{total} 条"
         if fail_count > 0:
             msg += f"（{fail_count} 条失败）"
-        callout(msg, type="success", icon="&#10003;")
+        callout(msg, type="success", icon="✅")
 
         divider()
-        st.subheader("分析结果")
+        st.subheader("✅ 当前完成结果")
 
         for i, r in enumerate(results):
             if r.get("success"):
@@ -478,7 +478,7 @@ class LeadAnalysisPage(AnalysisPage):
                 title="线索评分",
                 value=f"{score}/100",
                 subtitle="综合质量评分",
-                icon="&#128200;",
+                icon="📈",
                 border_color=score_color,
             )
         with col2:
@@ -486,7 +486,7 @@ class LeadAnalysisPage(AnalysisPage):
                 title="线索等级",
                 value=profile.get('lead_grade', 'N/A'),
                 subtitle="A(85+) B+(70+) B(55+) C(40+) D(<40)",
-                icon="&#127942;",
+                icon="🏆",
                 border_color="#10B981",
             )
         with col3:
@@ -496,7 +496,7 @@ class LeadAnalysisPage(AnalysisPage):
                 title="购买意向",
                 value=f"{intent}/10",
                 subtitle="高意向" if intent >= 7 else "中意向" if intent >= 4 else "低意向",
-                icon="&#128065;",
+                icon="👁️",
                 border_color=intent_color,
             )
 
@@ -798,7 +798,7 @@ class LeadAnalysisPage(AnalysisPage):
                 empty_state(
                     title="暂无历史记录",
                     description="去上方录入线索开始分析吧！",
-                    icon="&#128101;",
+                    icon="🗂️",
                 )
                 return
 
@@ -812,7 +812,7 @@ class LeadAnalysisPage(AnalysisPage):
                 empty_state(
                     title="暂无历史记录",
                     description="没有找到匹配的记录。",
-                    icon="&#128101;",
+                    icon="🗂️",
                 )
                 return
 

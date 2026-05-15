@@ -278,7 +278,7 @@ def render_match_result_details(match_result: Dict[str, Any]) -> None:
             title="综合匹配度",
             value=f"{score}/10",
             subtitle="强匹配" if score >= 7 else "中等匹配" if score >= 5 else "弱匹配",
-            icon="&#127919;",
+            icon="🎯",
             border_color=color,
         )
 
@@ -369,21 +369,21 @@ def render_strategy_content(strategy: Dict[str, Any]) -> None:
         metric_card(
             title="预估转化率",
             value=cp.get("estimated_conversion_rate", "未知"),
-            icon="&#128200;",
+            icon="📈",
             border_color="#10B981",
         )
     with col2:
         metric_card(
             title="置信度",
             value=cp.get("confidence_level", "未知"),
-            icon="&#128170;",
+            icon="💪",
             border_color="#6366F1",
         )
     with col3:
         metric_card(
             title="建议样本量",
             value=cp.get("recommended_sample_size", "未知"),
-            icon="&#128202;",
+            icon="📊",
             border_color="#F59E0B",
         )
 
@@ -395,7 +395,7 @@ def render_history_list(
     content_func: Callable[[Dict[str, Any]], None],
     empty_title: str = "暂无记录",
     empty_description: str = "开始分析后将显示历史记录",
-    empty_icon: str = "&#128218;"
+    empty_icon: str = "📚"
 ) -> None:
     """渲染历史记录列表
 

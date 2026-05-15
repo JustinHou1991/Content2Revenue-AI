@@ -34,7 +34,7 @@ class BasePage(ABC):
             callout(
                 "请先在「系统设置」中配置API Key。配置好API Key后，系统会自动保存配置，刷新页面也不会丢失。",
                 type="warning",
-                icon="&#9888;",
+                icon="⚠️",
             )
             return False
         return True
@@ -256,7 +256,7 @@ class MatchPage(BasePage):
             title=title,
             value=f"{score}/10",
             subtitle=level,
-            icon="&#127919;",
+            icon="🎯",
             border_color=color,
         )
 

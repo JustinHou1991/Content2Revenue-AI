@@ -84,10 +84,10 @@ class MatchCenterPage(MatchPage):
 
     def __init__(self):
         super().__init__(
-            title="匹配中心",
-            icon="&#127919;",
-            description="将内容特征与线索画像进行语义匹配，找到最合适的内容-线索组合"
-        )
+        title="匹配中心",
+        icon="🎯",
+        description="将内容特征与线索画像进行语义匹配，找到最合适的内容-线索组合"
+    )
 
     def _render_single_match(self):
         """单对匹配"""
@@ -304,8 +304,11 @@ class MatchCenterPage(MatchPage):
         callout(
             f"批量匹配完成！共匹配 {len(results)} 条线索",
             type="success",
-            icon="&#10003;",
+            icon="✅",
         )
+
+        divider()
+        st.subheader("✅ 当前匹配结果")
 
         for idx, r in enumerate(results, 1):
             lead_snap = r.get("lead_snapshot", {})
@@ -367,7 +370,7 @@ class MatchCenterPage(MatchPage):
             title="综合匹配度",
             value=f"{score}/10",
             subtitle="强匹配" if score >= 7 else "中等匹配" if score >= 5 else "弱匹配",
-            icon="&#127919;",
+            icon="🎯",
             border_color=color,
         )
 
@@ -511,7 +514,7 @@ class MatchCenterPage(MatchPage):
                 empty_state(
                     title="暂无匹配记录",
                     description="请先进行内容-线索匹配",
-                    icon="&#127919;",
+                    icon="🎯",
                 )
         except Exception as e:
             callout(f"加载失败: {str(e)}", type="error")
