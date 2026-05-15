@@ -9,6 +9,7 @@ import re
 import logging
 import threading
 import time
+import random
 from typing import Optional, Dict, Any, List, Iterator, Callable, Tuple
 import httpx
 from openai import OpenAI
@@ -67,6 +68,9 @@ def remove_custom_model(model_name: str) -> None:
 
 class LLMClient:
     """统一的LLM调用客户端"""
+
+    # 全局限流信号量：防止多线程同时调用 API 触发 thundering herd
+    _global_semaphore = threading.BoundedSemaphore(2)
 
     # 模型配置注册表
     MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
@@ -357,12 +361,13 @@ class LLMClient:
         for attempt in range(max_retries + 1):
             try:
                 start_time = time.monotonic()
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens or self.config["max_tokens_default"],
-                )
+                with self._global_semaphore:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens or self.config["max_tokens_default"],
+                    )
                 self._record_usage(response)
                 elapsed = time.monotonic() - start_time
                 content = response.choices[0].message.content or ""
@@ -380,15 +385,15 @@ class LLMClient:
                 is_rate_limit = "429" in error_str or "rate_limit" in error_str.lower()
                 is_server_error = any(code in error_str for code in ["500", "502", "503", "504"])
                 if (is_rate_limit or is_server_error) and attempt < max_retries:
-                    wait_time = min(2 ** attempt * 2, 30)  # 2s, 4s, 8s, ... 最大30s
+                    wait_time = min(2 ** attempt * 2, 30)
+                    time.sleep(wait_time + random.uniform(0, 1))
                     logger.warning(
-                        "chat() 第 %d 次调用遇到 %s，等待 %ds 后重试: %s",
+                        "chat() 第 %d 次调用遇到 %s，等待 %.1fs 后重试: %s",
                         attempt + 1,
                         "速率限制" if is_rate_limit else "服务端错误",
                         wait_time,
                         error_str[:200],
                     )
-                    time.sleep(wait_time)
                     continue
                 logger.error("chat() 调用失败（已重试 %d 次）: %s", attempt + 1, e)
                 break
@@ -511,13 +516,14 @@ class LLMClient:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content},
                     ]
-                    api_response = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=attempt_messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens or self.config["max_tokens_default"],
-                        response_format={"type": "json_object"},
-                    )
+                    with self._global_semaphore:
+                        api_response = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=attempt_messages,
+                            temperature=temperature,
+                            max_tokens=max_tokens or self.config["max_tokens_default"],
+                            response_format={"type": "json_object"},
+                        )
                     self._record_usage(api_response)
                     content = api_response.choices[0].message.content
                     if not content:
@@ -574,13 +580,13 @@ class LLMClient:
                 is_server_error = any(code in error_str for code in ["500", "502", "503", "504"])
                 if (is_rate_limit or is_server_error) and attempt < max_retries:
                     wait_time = min(2 ** attempt * 2, 30)
+                    time.sleep(wait_time + random.uniform(0, 1))
                     logger.warning(
-                        "chat_json() 第 %d 次调用遇到 %s，等待 %ds 后重试",
+                        "chat_json() 第 %d 次调用遇到 %s，等待 %.1fs 后重试",
                         attempt + 1,
                         "速率限制" if is_rate_limit else "服务端错误",
                         wait_time,
                     )
-                    time.sleep(wait_time)
                     continue
                 if attempt == max_retries:
                     raise
@@ -647,24 +653,25 @@ class LLMClient:
     def _repair_json(self, broken_json: str) -> Dict[str, Any]:
         """让LLM修复损坏的JSON"""
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "你是一个JSON修复专家。请修复以下JSON，只输出修复后的JSON，不要有任何其他内容。",
-                    },
-                    {"role": "user", "content": broken_json},
-                ],
-                temperature=0.1,
-                response_format=(
-                    {"type": "json_object"}
-                    if self.config["supports_json_mode"]
-                    else None
-                ),
-            )
-            self._record_usage(response)
-            content = response.choices[0].message.content
+            with self._global_semaphore:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "你是一个JSON修复专家。请修复以下JSON，只输出修复后的JSON，不要有任何其他内容。",
+                        },
+                        {"role": "user", "content": broken_json},
+                    ],
+                    temperature=0.1,
+                    response_format=(
+                        {"type": "json_object"}
+                        if self.config["supports_json_mode"]
+                        else None
+                    ),
+                )
+                self._record_usage(response)
+                content = response.choices[0].message.content
             if not content:
                 raise RuntimeError("JSON修复调用返回了空内容")
 
