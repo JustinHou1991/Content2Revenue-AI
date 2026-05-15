@@ -16,6 +16,53 @@ from ui.components.design_system import (
 from ui.styles import COLORS
 
 
+def _load_sample_data():
+    """加载示例数据（内容分析 + 线索分析）"""
+    try:
+        from data.sample_data import SAMPLE_SCRIPTS, SAMPLE_LEADS
+
+        progress_bar = st.empty()
+        status_text = st.empty()
+
+        try:
+            bar = progress_bar.progress(0, text="正在加载示例数据...")
+        except TypeError:
+            bar = progress_bar.progress(0)
+            status_text.caption("正在加载示例数据...")
+
+        total = len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)
+
+        for i, sample in enumerate(SAMPLE_SCRIPTS):
+            try:
+                if st.session_state.get("orchestrator"):
+                    st.session_state.orchestrator.analyze_content(sample["script_text"])
+            except Exception as e:
+                st.warning(f"示例脚本 {sample['script_id']} 分析失败: {e}")
+            try:
+                bar.progress((i + 1) / total, text=f"加载示例数据... {i+1}/{total}")
+            except TypeError:
+                bar.progress((i + 1) / total)
+
+        for j, sample in enumerate(SAMPLE_LEADS):
+            try:
+                if st.session_state.get("orchestrator"):
+                    st.session_state.orchestrator.analyze_lead(sample["lead_data"])
+            except Exception as e:
+                st.warning(f"示例线索 {sample['lead_id']} 分析失败: {e}")
+            try:
+                bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / total,
+                             text=f"加载示例数据... {len(SAMPLE_SCRIPTS)+j+1}/{total}")
+            except TypeError:
+                bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / total)
+
+        progress_bar.empty()
+        status_text.empty()
+        st.success("示例数据加载完成！")
+        st.rerun()
+    except Exception as e:
+        st.error(f"加载示例数据失败: {str(e)}")
+
+
 def render_dashboard():
     """渲染仪表盘页面"""
     # 页面头部
@@ -134,13 +181,13 @@ def render_dashboard():
         st.info("请在「系统设置」中配置 API Key 后开始使用。")
         return
 
-    # 已初始化但暂无数据 — 显示引导而非配置提示
+    # 已初始化但暂无数据 — 显示引导
     if all(v == 0 for v in stats.values()):
         divider()
 
         st.info("🎉 系统已就绪！前往「内容分析」或「线索分析」开始你的第一个分析任务。")
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("📝 分析新内容", use_container_width=True, type="primary"):
                 st.session_state.nav_target = "content"
@@ -149,6 +196,9 @@ def render_dashboard():
             if st.button("👤 录入新线索", use_container_width=True, type="primary"):
                 st.session_state.nav_target = "lead"
                 st.rerun()
+        with col3:
+            if st.button("🚀 加载示例数据", use_container_width=True, type="primary"):
+                _load_sample_data()
         return
 
     divider()

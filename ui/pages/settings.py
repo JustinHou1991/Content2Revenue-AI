@@ -150,7 +150,7 @@ def render_settings():
                     st.error(f"连接失败: {str(e)}")
                     st.session_state.initialized = False
 
-        st.markdown("---")
+        divider()
 
         # 数据管理
         st.subheader("数据管理")
@@ -162,9 +162,6 @@ def render_settings():
                 col2.metric("线索分析", stats["lead_count"])
                 col3.metric("匹配结果", stats["match_count"])
                 col4.metric("策略建议", stats["strategy_count"])
-
-                if st.button("加载示例数据"):
-                    _load_sample_data()
             except Exception as e:
                 st.error(f"数据管理加载失败: {str(e)}")
         else:
@@ -249,43 +246,3 @@ def render_settings():
                 st.info("暂无自定义模型，请使用上方表单添加。")
         except Exception as e:
             st.warning(f"加载自定义模型列表失败: {e}")
-
-
-def _load_sample_data():
-    """加载示例数据"""
-    try:
-        from data.sample_data import SAMPLE_SCRIPTS, SAMPLE_LEADS
-
-        try:
-            progress_bar = st.progress(0, text="正在加载示例数据...")
-        except TypeError:
-            progress_bar = st.progress(0)
-            status_text = st.caption("正在加载示例数据...")
-
-        for i, sample in enumerate(SAMPLE_SCRIPTS):
-            try:
-                if st.session_state.get("orchestrator"):
-                    st.session_state.orchestrator.analyze_content(sample["script_text"])
-            except Exception as e:
-                st.warning(f"示例脚本 {sample['script_id']} 分析失败: {e}")
-            try:
-                progress_bar.progress((i + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)), text=f"加载示例数据... {i+1}/{len(SAMPLE_SCRIPTS)}")
-            except TypeError:
-                progress_bar.progress((i + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)))
-
-        for j, sample in enumerate(SAMPLE_LEADS):
-            try:
-                if st.session_state.get("orchestrator"):
-                    st.session_state.orchestrator.analyze_lead(sample["lead_data"])
-            except Exception as e:
-                st.warning(f"示例线索 {sample['lead_id']} 分析失败: {e}")
-            try:
-                progress_bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)), text=f"加载示例数据... {len(SAMPLE_SCRIPTS)+j+1}/{len(SAMPLE_SCRIPTS)+len(SAMPLE_LEADS)}")
-            except TypeError:
-                progress_bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)))
-
-        progress_bar.empty()
-        st.success("示例数据加载完成！")
-        st.rerun()
-    except Exception as e:
-        st.error(f"加载示例数据失败: {str(e)}")
