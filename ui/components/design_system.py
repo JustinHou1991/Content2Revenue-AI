@@ -500,7 +500,7 @@ def metric_row(
     参数:
         metrics: 指标列表，每个元素为 metric_card 的参数字典
         columns: 列数 (1-4)
-        key:     Streamlit 唯一键
+        key:     Streamlit 唯一键（必传，避免跨组件key冲突）
 
     使用示例:
         metric_row([
@@ -508,7 +508,7 @@ def metric_row(
             {"title": "内容数", "value": "156", "delta": "+8", "trend": "up", "icon": "📝"},
             {"title": "转化率", "value": "3.2%", "delta": "-0.3%", "trend": "down", "icon": "📊"},
             {"title": "订阅者", "value": "2,847", "delta": "+156", "trend": "up", "icon": "👥"},
-        ])
+        ], key="dashboard_top")
     """
     cols = st.columns(columns)
     for i, m in enumerate(metrics):
@@ -521,7 +521,7 @@ def metric_row(
                 icon=m.get("icon", ""),
                 trend=m.get("trend", "up"),
                 border_color=m.get("border_color"),
-                key=f"{key}_{i}" if key else f"metric_row_{i}",
+                key=f"{key}_{i}",
             )
 
 

@@ -255,8 +255,17 @@ class ContentAnalysisPage(AnalysisPage):
         st.warning("⚠️ **分析中，请勿切换页面**，完成后将自动显示结果。")
         st.info(f"共 {total} 条脚本，并发处理中...")
 
-        progress_bar = st.progress(0, text=f"准备分析 {total} 条脚本...")
+        progress_bar = st.empty()
         status_text = st.empty()
+
+        def _safe_progress(val, text):
+            try:
+                progress_bar.progress(val, text=text)
+            except TypeError:
+                progress_bar.progress(val)
+                status_text.info(text)
+
+        _safe_progress(0, f"准备分析 {total} 条脚本...")
 
         orchestrator = self._get_orchestrator()
 
@@ -290,11 +299,11 @@ class ContentAnalysisPage(AnalysisPage):
                 with completed_lock:
                     completed += 1
                 pct = int(completed / total * 100)
-                progress_bar.progress(
-                    pct / 100,
-                    text=f"分析中 {completed}/{total} ({pct}%)"
-                )
+                _safe_progress(pct / 100, f"分析中 {completed}/{total} ({pct}%)")
                 status_text.info(f"⏳ 已完成 {completed}/{total} 条")
+
+        progress_bar.empty()
+        status_text.empty()
 
         state = {
             "results": results,
@@ -342,6 +351,7 @@ class ContentAnalysisPage(AnalysisPage):
         st.session_state.content_field_mapping = None
         if "batch_state" in st.session_state:
             del st.session_state.batch_state
+        st.rerun()
 
     def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":
         """解析 PDF 文件，提取文本内容
@@ -660,9 +670,9 @@ class ContentAnalysisPage(AnalysisPage):
                 with st.expander(
                     f"[{rid}] 评分 {score}/10 | {hook_type} | {record['created_at'][:10]}"
                 ):
-                    st.write(raw_text)
-                    if st.button("查看详情", key=f"detail_{record['id']}"):
-                        self._display_analysis(analysis)
+                    st.caption(raw_text)
+                    divider()
+                    self._display_analysis(analysis)
 
             # 分页控制
             self._render_pagination(total_count, page_size, "content_history")

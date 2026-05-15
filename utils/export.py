@@ -156,6 +156,7 @@ def _write_matches_sheet(writer: pd.ExcelWriter, matches: List[Dict]) -> None:
         match_result = item.get("match_result_json", {})
         content_snapshot = item.get("content_snapshot_json", {})
         lead_snapshot = item.get("lead_snapshot_json", {})
+        dim_scores = match_result.get("dimension_scores", {})
 
         row = {
             "匹配ID": item.get("id", ""),
@@ -169,9 +170,11 @@ def _write_matches_sheet(writer: pd.ExcelWriter, matches: List[Dict]) -> None:
                 content_snapshot.get("title", "")[:50] if content_snapshot else ""
             ),
             "公司名称": lead_snapshot.get("company_name", "") if lead_snapshot else "",
-            "需求匹配": match_result.get("needs_match_score", ""),
-            "预算匹配": match_result.get("budget_match_score", ""),
-            "时机匹配": match_result.get("timing_match_score", ""),
+            "受众匹配": dim_scores.get("audience_fit", ""),
+            "痛点相关": dim_scores.get("pain_point_relevance", ""),
+            "阶段对齐": dim_scores.get("stage_alignment", ""),
+            "CTA适当": dim_scores.get("cta_appropriateness", ""),
+            "情感共鸣": dim_scores.get("emotion_resonance", ""),
             "匹配理由": str(match_result.get("match_reason", ""))[:200],
         }
         rows.append(row)
@@ -186,6 +189,10 @@ def _write_strategies_sheet(writer: pd.ExcelWriter, strategies: List[Dict]) -> N
     rows = []
     for item in strategies:
         strategy = item.get("strategy_json", {})
+        cs = strategy.get("content_strategy", {})
+        ds = strategy.get("distribution_strategy", {})
+        cp = strategy.get("conversion_prediction", {})
+        ab = strategy.get("a_b_test_suggestion", {})
         row = {
             "策略ID": item.get("id", ""),
             "匹配ID": item.get("match_id", ""),
@@ -193,12 +200,16 @@ def _write_strategies_sheet(writer: pd.ExcelWriter, strategies: List[Dict]) -> N
             "线索ID": item.get("lead_id", ""),
             "创建时间": item.get("created_at", ""),
             "模型": item.get("model", ""),
-            "策略类型": strategy.get("strategy_type", ""),
-            "优先级": strategy.get("priority", ""),
-            "预期转化": strategy.get("expected_conversion_rate", ""),
-            "推荐话术": str(strategy.get("recommended_script", ""))[:300],
-            "跟进时机": strategy.get("follow_up_timing", ""),
-            "关键切入点": ", ".join(strategy.get("key_talking_points", [])),
+            "推荐Hook": cs.get("recommended_hook", ""),
+            "推荐结构": cs.get("recommended_structure", ""),
+            "语气指导": cs.get("tone_guidance", ""),
+            "最佳发布时间": ds.get("best_timing", ""),
+            "渠道建议": ds.get("channel_suggestion", ""),
+            "预估转化率": cp.get("estimated_conversion_rate", ""),
+            "置信度": cp.get("confidence_level", ""),
+            "A/B方案A": ab.get("variant_a", ""),
+            "A/B方案B": ab.get("variant_b", ""),
+            "预估影响": strategy.get("estimated_impact", ""),
         }
         rows.append(row)
 
@@ -495,11 +506,13 @@ class PDFReportGenerator:
 
         match_data = match_result.get("match_result", {})
 
-        # 维度评分表
+        dim_scores = match_data.get("dimension_scores", {})
         dimensions = [
-            ("需求匹配度", match_data.get("needs_match_score", 0)),
-            ("预算匹配度", match_data.get("budget_match_score", 0)),
-            ("时机匹配度", match_data.get("timing_match_score", 0)),
+            ("受众匹配度", dim_scores.get("audience_fit", 0)),
+            ("痛点相关性", dim_scores.get("pain_point_relevance", 0)),
+            ("阶段对齐度", dim_scores.get("stage_alignment", 0)),
+            ("CTA适当性", dim_scores.get("cta_appropriateness", 0)),
+            ("情感共鸣度", dim_scores.get("emotion_resonance", 0)),
         ]
 
         dim_data = [["维度", "评分", "评级"]]

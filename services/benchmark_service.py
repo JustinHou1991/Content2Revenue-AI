@@ -61,7 +61,7 @@ class BenchmarkService:
             if isinstance(json_data, str):
                 try:
                     json_data = json.loads(json_data)
-                except:
+                except (json.JSONDecodeError, TypeError):
                     continue
             
             hook_strengths.append(self._safe_float(json_data.get("hook_strength")))
@@ -125,7 +125,7 @@ class BenchmarkService:
             if isinstance(json_data, str):
                 try:
                     json_data = json.loads(json_data)
-                except:
+                except (json.JSONDecodeError, TypeError):
                     continue
             score = self._safe_float(json_data.get("content_score"))
             if score > 0:

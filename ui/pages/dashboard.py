@@ -81,7 +81,7 @@ def render_dashboard():
                 "trend": "up",
                 "border_color": "#3B82F6",
             },
-        ])
+        ], key="dashboard_top")
     else:
         # 未初始化 / 加载失败时显示占位卡片
         metric_row([
@@ -117,7 +117,7 @@ def render_dashboard():
                 "trend": "neutral",
                 "border_color": "#3B82F6",
             },
-        ])
+        ], key="dashboard_top_empty")
 
     # 空状态引导（仅未初始化时显示配置提示）
     if not is_initialized or stats is None:
@@ -177,7 +177,7 @@ def render_dashboard():
             "icon": "🎯",
             "trend": "neutral",
         },
-    ], columns=3)
+    ], columns=3, key="dashboard_avg")
 
     divider()
 

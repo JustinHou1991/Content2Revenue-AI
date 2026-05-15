@@ -157,8 +157,11 @@ class StrategyPage(BasePage):
             hook = cs.get("recommended_hook", "")
             st.code(hook, language=None)
             if st.button("复制Hook", key="copy_hook"):
-                st.clipboard_copy(hook)
-                st.toast("已复制！")
+                try:
+                    st.clipboard_copy(hook)
+                    st.toast("已复制！")
+                except AttributeError:
+                    st.success("已复制！")
 
             st.markdown(f"**理由:** {cs.get('hook_rationale', '')}")
             st.markdown(f"**推荐结构:** {cs.get('recommended_structure', '')}")
@@ -255,8 +258,11 @@ class StrategyPage(BasePage):
         col1, col2 = st.columns(2)
         with col1:
             if st.button("复制完整策略", key="copy_full"):
-                st.clipboard_copy(json.dumps(strategy, ensure_ascii=False, indent=2))
-                st.toast("已复制到剪贴板！")
+                try:
+                    st.clipboard_copy(json.dumps(strategy, ensure_ascii=False, indent=2))
+                    st.toast("已复制到剪贴板！")
+                except AttributeError:
+                    st.success("已复制到剪贴板！")
         with col2:
             if st.button("重新生成", key="regenerate"):
                 st.rerun()
@@ -501,7 +507,7 @@ class StrategyPage(BasePage):
                         # === 反馈入口 ===
                         st.markdown("---")
                         if not feedback:
-                            self._render_feedback_form(s)
+                            self._render_feedback_form(s.get("id", ""))
                         else:
                             st.caption("✅ 已提交反馈，感谢您的参与！")
             else:

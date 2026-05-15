@@ -256,7 +256,11 @@ def _load_sample_data():
     try:
         from data.sample_data import SAMPLE_SCRIPTS, SAMPLE_LEADS
 
-        progress_bar = st.progress(0, text="正在加载示例数据...")
+        try:
+            progress_bar = st.progress(0, text="正在加载示例数据...")
+        except TypeError:
+            progress_bar = st.progress(0)
+            status_text = st.caption("正在加载示例数据...")
 
         for i, sample in enumerate(SAMPLE_SCRIPTS):
             try:
@@ -264,7 +268,10 @@ def _load_sample_data():
                     st.session_state.orchestrator.analyze_content(sample["script_text"])
             except Exception as e:
                 st.warning(f"示例脚本 {sample['script_id']} 分析失败: {e}")
-            progress_bar.progress((i + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)))
+            try:
+                progress_bar.progress((i + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)), text=f"加载示例数据... {i+1}/{len(SAMPLE_SCRIPTS)}")
+            except TypeError:
+                progress_bar.progress((i + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)))
 
         for j, sample in enumerate(SAMPLE_LEADS):
             try:
@@ -272,7 +279,10 @@ def _load_sample_data():
                     st.session_state.orchestrator.analyze_lead(sample["lead_data"])
             except Exception as e:
                 st.warning(f"示例线索 {sample['lead_id']} 分析失败: {e}")
-            progress_bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)))
+            try:
+                progress_bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)), text=f"加载示例数据... {len(SAMPLE_SCRIPTS)+j+1}/{len(SAMPLE_SCRIPTS)+len(SAMPLE_LEADS)}")
+            except TypeError:
+                progress_bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / (len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)))
 
         progress_bar.empty()
         st.success("示例数据加载完成！")

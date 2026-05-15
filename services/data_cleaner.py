@@ -492,7 +492,11 @@ class ScriptDataCleaner:
         # 计算互动率
         if all(col in df.columns for col in ["点赞数", "评论数", "转发数", "播放量"]):
             df["互动数"] = df["点赞数"] + df["评论数"] + df["转发数"]
-            df["互动率"] = (df["互动数"] / df["播放量"] * 100).round(2)
+            df["互动率"] = df.apply(
+                lambda row: round((row["互动数"] / row["播放量"] * 100), 2)
+                if row["播放量"] > 0 else 0,
+                axis=1
+            )
 
         return df
 

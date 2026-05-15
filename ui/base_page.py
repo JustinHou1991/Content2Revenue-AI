@@ -203,9 +203,14 @@ class AnalysisPage(BasePage):
         return user_mapping
 
     def _render_batch_progress(self, total: int, current: int, prefix: str = ""):
-        """渲染批量处理进度"""
+        """渲染批量处理进度（兼容旧版Streamlit）"""
         progress_text = f"{prefix} ({current}/{total})" if prefix else f"正在处理... ({current}/{total})"
-        return st.progress(current / total, text=progress_text)
+        try:
+            return st.progress(current / total, text=progress_text)
+        except TypeError:
+            bar = st.progress(current / total)
+            st.caption(progress_text)
+            return bar
 
 
 class MatchPage(BasePage):

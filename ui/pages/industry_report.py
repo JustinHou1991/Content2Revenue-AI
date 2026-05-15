@@ -20,6 +20,9 @@ class IndustryReportPage(BasePage):
 
     def _render_content(self):
         """渲染页面内容"""
+        if not self._check_initialization():
+            return
+
         st.markdown("""
         ### 生成行业内容营销趋势报告
         
@@ -345,7 +348,7 @@ class IndustryReportPage(BasePage):
         dimension_scores = []
         
         for match in matches:
-            json_data = match.get("match_json", {})
+            json_data = match.get("match_result_json", {})
             if isinstance(json_data, str):
                 try:
                     json_data = json.loads(json_data)

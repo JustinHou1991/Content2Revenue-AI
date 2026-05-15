@@ -359,8 +359,17 @@ class LeadAnalysisPage(AnalysisPage):
         st.warning("⚠️ **分析中，请勿切换页面**，完成后将自动显示结果。")
         st.info(f"共 {total} 条线索，并发处理中...")
 
-        progress_bar = st.progress(0, text=f"准备分析 {total} 条线索...")
+        progress_bar = st.empty()
         status_text = st.empty()
+
+        def _safe_progress(val, text):
+            try:
+                progress_bar.progress(val, text=text)
+            except TypeError:
+                progress_bar.progress(val)
+                status_text.info(text)
+
+        _safe_progress(0, f"准备分析 {total} 条线索...")
 
         orchestrator = self._get_orchestrator()
 
@@ -396,11 +405,11 @@ class LeadAnalysisPage(AnalysisPage):
                 with completed_lock:
                     completed += 1
                 pct = int(completed / total * 100)
-                progress_bar.progress(
-                    pct / 100,
-                    text=f"分析中 {completed}/{total} ({pct}%)"
-                )
+                _safe_progress(pct / 100, f"分析中 {completed}/{total} ({pct}%)")
                 status_text.info(f"⏳ 已完成 {completed}/{total} 条")
+
+        progress_bar.empty()
+        status_text.empty()
 
         state = {
             "results": results,
@@ -450,6 +459,7 @@ class LeadAnalysisPage(AnalysisPage):
         st.session_state.lead_field_mapping = None
         if "lead_batch_state" in st.session_state:
             del st.session_state.lead_batch_state
+        st.rerun()
 
     def _display_result(self, result: dict):
         """展示单个分析结果（优化版：层次分明）"""

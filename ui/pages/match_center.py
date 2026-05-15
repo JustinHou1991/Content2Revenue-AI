@@ -189,8 +189,17 @@ class MatchCenterPage(MatchPage):
             st.warning("⚠️ **匹配中，请勿切换页面**，完成后将自动显示结果。")
             st.info(f"共 {total_leads} 条线索，并发匹配中...")
 
-            progress_bar = st.progress(0, text=f"准备匹配 {total_leads} 条线索...")
+            progress_bar = st.empty()
             status_text = st.empty()
+
+            def _safe_progress(val, text):
+                try:
+                    progress_bar.progress(val, text=text)
+                except TypeError:
+                    progress_bar.progress(val)
+                    status_text.info(text)
+
+            _safe_progress(0, f"准备匹配 {total_leads} 条线索...")
 
             content_list = [
                 {"analysis": c["analysis_json"], "content_id": c["id"]} for c in contents
@@ -276,11 +285,11 @@ class MatchCenterPage(MatchPage):
                     with completed_lock:
                         completed += 1
                     pct = int(completed / total_leads * 100)
-                    progress_bar.progress(
-                        pct / 100,
-                        text=f"匹配中 {completed}/{total_leads} ({pct}%)"
-                    )
+                    _safe_progress(pct / 100, f"匹配中 {completed}/{total_leads} ({pct}%)")
                     status_text.info(f"⏳ 已完成 {completed}/{total_leads} 条")
+
+            progress_bar.empty()
+            status_text.empty()
 
             if match_results_to_save:
                 try:
@@ -334,7 +343,11 @@ class MatchCenterPage(MatchPage):
                     content_snap = match.get("content_snapshot", {})
 
                     st.markdown("---")
-                    score_icon = "🟢" if score >= 7 else "🟡" if score >= 5 else "🔴"
+                    try:
+                        score_val = float(score)
+                        score_icon = "🟢" if score_val >= 7 else "🟡" if score_val >= 5 else "🔴"
+                    except (ValueError, TypeError):
+                        score_icon = "⚪"
                     st.markdown(f"**{score_icon} #{i+1} 匹配度: {score}/10**")
 
                     # 内容摘要
