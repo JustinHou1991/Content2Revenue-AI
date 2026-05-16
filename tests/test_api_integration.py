@@ -13,8 +13,8 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import AsyncGenerator
 
-# 使用httpx进行异步测试
 import httpx
+from httpx import ASGITransport
 
 # 导入被测试模块
 import sys
@@ -27,6 +27,13 @@ from core.tenant_manager import TenantManager, TenantPlan
 from core.rate_limiter import RateLimiter
 
 # ==================== Fixtures ====================
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """每个测试前重置限流器"""
+    from api.main import rate_limiter
+    rate_limiter.reset_all()
+    yield
 
 @pytest.fixture
 def auth_manager():
@@ -51,7 +58,8 @@ def rate_limiter():
 @pytest.fixture
 async def async_client() -> AsyncGenerator[httpx.AsyncClient, None]:
     """创建异步HTTP客户端"""
-    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
 # ==================== 认证测试 ====================
@@ -200,7 +208,12 @@ class TestTenant:
             }
         )
         token = login_response.json()["access_token"]
-        user = login_response.json()["user"]
+
+        me_response = await async_client.get(
+            f"{API_PREFIX}/auth/me",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        user = me_response.json()
         tenant_id = user.get("tenant_id")
         
         if tenant_id:
@@ -224,19 +237,21 @@ class TestRateLimit:
         # 快速发送多个请求
         responses = []
         for _ in range(150):  # 超过默认限制
-            response = await async_client.get("/health")
+            response = await async_client.get(f"{API_PREFIX}/auth/me")
             responses.append(response.status_code)
         
         # 应该有部分请求被限流
         assert 429 in responses
     
+    @pytest.mark.slow
     async def test_rate_limit_reset(self, async_client: httpx.AsyncClient):
         """测试限流重置"""
         # 等待限流窗口重置
         await asyncio.sleep(61)  # 等待1分钟
         
-        response = await async_client.get("/health")
-        assert response.status_code == 200
+        response = await async_client.get(f"{API_PREFIX}/auth/me")
+        # 限流应已重置，请求不再返回 429（未认证返回 401）
+        assert response.status_code != 429
 
 # ==================== 内容分析测试 ====================
 

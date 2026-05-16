@@ -1,11 +1,9 @@
 """行业报告页面 - 自动生成行业内容营销趋势报告"""
 import streamlit as st
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, List
 
 from ui.base_page import BasePage
-from ui.components import callout
-from services.benchmark_service import BenchmarkService
 
 
 class IndustryReportPage(BasePage):

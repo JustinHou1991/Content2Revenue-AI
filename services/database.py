@@ -899,7 +899,7 @@ class Database:
             value = row["value"] if row else default
 
             # API_KEY 需要解密后返回
-            if key == "API_KEY" and value:
+            if "API_KEY" in key.upper() and value:
                 # 检测到旧的XOR加密数据，在同一事务内迁移为Fernet加密
                 if self._fernet is not None and not value.startswith(_FERNET_PREFIX):
                     logger.info("检测到旧的加密格式，自动迁移API_KEY为Fernet加密")
@@ -916,7 +916,7 @@ class Database:
             return value
 
     def set_setting(self, key: str, value: str) -> None:
-        if value and ("API_KEY" in key.upper() or "KEY" in key.upper()):
+        if value and "API_KEY" in key.upper():
             value = self._encrypt_value(value)
         with self._get_conn() as conn:
             now = datetime.now().isoformat()

@@ -192,8 +192,13 @@ async def log_requests(request: Request, call_next):
     return response
 
 # 限流中间件
+_rate_limit_exclusions = {"/health", "/", "/docs", "/openapi.json", "/redoc"}
+
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
+    if request.url.path in _rate_limit_exclusions:
+        return await call_next(request)
+
     client_id = request.headers.get("X-API-Key") or request.client.host
     
     if not rate_limiter.allow_request(client_id):
@@ -244,7 +249,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content=ErrorResponse(
             error_code=f"HTTP_{exc.status_code}",
             message=exc.detail
-        ).dict()
+        ).model_dump()
     )
 
 @app.exception_handler(Exception)
@@ -255,7 +260,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         content=ErrorResponse(
             error_code="INTERNAL_ERROR",
             message="服务器内部错误，请稍后重试"
-        ).dict()
+        ).model_dump()
     )
 
 # ==================== API路由 ====================

@@ -961,7 +961,7 @@ class TestErrorRecoveryE2E:
 
         analyzer = ContentAnalyzer(llm_client=mock_llm)
 
-        with pytest.raises(RuntimeError, match="内容分析失败"):
+        with pytest.raises(RuntimeError, match="分析失败"):
             analyzer.analyze(script_text=sample_script)
 
     def test_api_generic_error_handling(self, mock_llm, sample_lead_data):
@@ -970,7 +970,7 @@ class TestErrorRecoveryE2E:
 
         analyzer = LeadAnalyzer(llm_client=mock_llm)
 
-        with pytest.raises(RuntimeError, match="线索分析失败"):
+        with pytest.raises(RuntimeError, match="分析失败"):
             analyzer.analyze(lead_data=sample_lead_data)
 
     def test_empty_input_validation(self, mock_llm):

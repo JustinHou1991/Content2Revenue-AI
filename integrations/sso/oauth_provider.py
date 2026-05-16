@@ -12,6 +12,7 @@ Content2Revenue AI - OAuth 2.0 / OIDC SSO 集成
 import jwt
 import secrets
 import hashlib
+import base64
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass

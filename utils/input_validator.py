@@ -1,7 +1,7 @@
 """输入验证器 - 防止注入攻击和恶意输入"""
 import re
 import html
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,8 +41,8 @@ class InputValidator:
                 logger.warning(f"检测到危险模式: {pattern}")
                 text = re.sub(pattern, '[REMOVED]', text, flags=re.IGNORECASE | re.DOTALL)
 
-        # HTML 转义
-        text = html.escape(text)
+        # HTML 转义（不转义引号，避免破坏数据库存储内容）
+        text = html.escape(text, quote=False)
 
         return text
 
@@ -76,7 +76,7 @@ class InputValidator:
             df = df.head(max_rows)
 
         # 清洗字符串列
-        for col in df.select_dtypes(include=['object']).columns:
+        for col in df.select_dtypes(include=['object', 'string']).columns:
             df[col] = df[col].apply(lambda x: cls.sanitize_text(str(x)) if pd.notna(x) else x)
 
         return df

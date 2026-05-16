@@ -28,7 +28,7 @@ import logging
 import sqlite3
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -227,7 +227,7 @@ class AuthManager:
     
     def _create_token(self, user: User, token_type: str = "access") -> str:
         """创建JWT令牌"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         if token_type == "access":
             expire = now + timedelta(minutes=self.config.access_token_expire_minutes)

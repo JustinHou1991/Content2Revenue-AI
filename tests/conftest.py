@@ -10,6 +10,9 @@ import pytest
 # 确保项目根目录在 sys.path 中
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# API 集成测试需要允许 test 主机
+os.environ.setdefault("ALLOWED_HOSTS", "localhost,127.0.0.1,test")
+
 from services.database import Database
 
 # ============================================================

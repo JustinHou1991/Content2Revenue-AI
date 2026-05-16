@@ -23,3 +23,6 @@ cryptography>=41.0
 # === 认证（可选，按需加载） ===
 pyjwt>=2.8.0
 bcrypt>=4.1.0
+
+# === 测试 ===
+pytest-asyncio>=0.24.0

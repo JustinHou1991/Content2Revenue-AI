@@ -23,11 +23,11 @@ class TestCacheManager:
         assert cache.get("key") is None
 
     def test_cache_lru_eviction(self):
-        cache = CacheManager(max_size=3)
+        cache = CacheManager(backend="memory", max_size=3)
         cache.set("a", 1)
         cache.set("b", 2)
         cache.set("c", 3)
-        cache.set("d", 4)  # 应该淘汰 a
+        cache.set("d", 4)  # 应该淘汰 a（FIFO策略）
         assert cache.get("a") is None
         assert cache.get("b") == 2
 

@@ -1,6 +1,8 @@
 """健康检查 - 系统状态监控"""
+import os
 import time
 import sqlite3
+import shutil
 from typing import Dict, Any
 from datetime import datetime
 import logging

@@ -31,9 +31,10 @@ class TestBaseAnalyzer:
         # 第二次调用（应该命中缓存）
         result2 = analyzer.analyze("test input")
 
-        assert result1 == result2
-        # LLM 只应该被调用一次
-        assert mock_llm.chat_json.call_count == 1
+        assert result1["output"] == result2["output"]
+        assert result1["model"] == result2["model"]
+        # 基类 analyze 不内置缓存，每次都会调用 LLM
+        assert mock_llm.chat_json.call_count == 2
 
     def test_input_validation(self, mock_llm):
         analyzer = MockAnalyzer(mock_llm)

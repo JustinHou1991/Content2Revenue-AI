@@ -1,10 +1,8 @@
 """审计日志 - 记录用户操作和系统事件"""
 import json
 import os
-import time
-import hashlib
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 import sqlite3
 from contextlib import contextmanager
 import logging
@@ -104,6 +102,19 @@ class AuditLogger:
             details={"status_code": status_code},
             success=200 <= status_code < 300,
             duration_ms=duration_ms
+        )
+
+    def log_api_request(self, method: str, path: str,
+                        status_code: int, duration: float,
+                        client_ip: Optional[str] = None):
+        """记录 API 请求（中间件使用）"""
+        self.log(
+            event_type="API_REQUEST",
+            action=f"{method} {path}",
+            details={"status_code": status_code, "duration_s": round(duration, 4)},
+            ip_address=client_ip,
+            success=200 <= status_code < 300,
+            duration_ms=int(duration * 1000)
         )
 
     def log_data_access(self, action: str, resource_type: str,

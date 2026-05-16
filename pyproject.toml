@@ -23,3 +23,11 @@ known-first-party = ["content2revenue", "core"]
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "asyncio: marks tests as async (used with pytest-asyncio)",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]

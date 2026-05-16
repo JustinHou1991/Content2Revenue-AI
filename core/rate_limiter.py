@@ -150,6 +150,12 @@ class RateLimiter:
                 del self._windows[client_id]
             if client_id in self._blocked:
                 del self._blocked[client_id]
+
+    def reset_all(self):
+        """重置所有客户端限制（用于测试）"""
+        with self._lock:
+            self._windows.clear()
+            self._blocked.clear()
     
     def is_blocked(self, client_id: str) -> Tuple[bool, Optional[float]]:
         """
