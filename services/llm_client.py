@@ -193,7 +193,7 @@ class LLMClient:
         if self._is_custom:
             key = self.config["api_key"]
         else:
-            key = api_key or os.environ.get(self.config["env_key"])
+            key = api_key or self._resolve_api_key(self.config.get("env_key", ""))
         if not key:
             env_hint = self.config.get("env_key", "API_KEY")
             raise ValueError(f"请设置环境变量 {env_hint} 或传入api_key参数")
@@ -241,6 +241,20 @@ class LLMClient:
                 logger.info("已移除自定义模型: %s", model_name)
                 return True
             return False
+
+    @staticmethod
+    def _resolve_api_key(env_key: str) -> Optional[str]:
+        """多源解析 API Key：环境变量 → st.secrets（Streamlit Cloud 兼容）"""
+        key = os.environ.get(env_key)
+        if key:
+            return key
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets") and env_key in st.secrets:
+                return st.secrets[env_key]
+        except Exception:
+            pass
+        return None
 
     # ===== Token 与成本追踪 =====
 

@@ -47,7 +47,22 @@ logger = get_logger(__name__)
 # 固化模型配置（免费API Key，仅用于展示测试）
 # ============================================================
 DEFAULT_MODEL = os.environ.get("C2R_DEFAULT_MODEL", "LongCat-2.0-Preview")
-DEFAULT_API_KEY = os.environ.get("LONGCAT_API_KEY", "") or os.environ.get("C2R_API_KEY", "")
+
+def _resolve_default_api_key() -> str:
+    """多源解析默认 API Key（Streamlit Cloud 兼容）"""
+    key = os.environ.get("LONGCAT_API_KEY") or os.environ.get("C2R_API_KEY")
+    if key:
+        return key
+    try:
+        if "LONGCAT_API_KEY" in st.secrets:
+            return st.secrets["LONGCAT_API_KEY"]
+        if "C2R_API_KEY" in st.secrets:
+            return st.secrets["C2R_API_KEY"]
+    except Exception:
+        pass
+    return ""
+
+DEFAULT_API_KEY = _resolve_default_api_key()
 
 # 初始化session state
 if "orchestrator" not in st.session_state:
