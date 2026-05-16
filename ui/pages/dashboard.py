@@ -57,7 +57,7 @@ def _load_sample_data():
 
         all_futures = {}
 
-        with ThreadPoolExecutor(max_workers=min(6, total)) as executor:
+        with ThreadPoolExecutor(max_workers=min(8, total)) as executor:
             for i, sample in enumerate(SAMPLE_SCRIPTS):
                 all_futures[executor.submit(_analyze_script, i, sample)] = ("script", i)
 

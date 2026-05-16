@@ -70,7 +70,7 @@ class LLMClient:
     """统一的LLM调用客户端"""
 
     # 全局限流信号量：防止多线程同时调用 API 触发 thundering herd
-    _global_semaphore = threading.BoundedSemaphore(2)
+    _global_semaphore = threading.BoundedSemaphore(4)
 
     # 模型配置注册表
     MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {

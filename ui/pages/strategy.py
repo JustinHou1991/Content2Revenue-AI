@@ -282,7 +282,7 @@ class StrategyPage(BasePage):
 
         # 策略反馈表单
         divider()
-        self._render_feedback_form(result)
+        self._render_feedback_form(result, form_key_prefix=key_prefix)
 
     def _handle_batch_strategy(self, match_results: list):
         """批量生成策略（并发优化）"""
@@ -341,12 +341,13 @@ class StrategyPage(BasePage):
                 with st.expander(f"匹配 #{i+1} - 生成失败"):
                     st.error(err)
 
-    def _render_feedback_form(self, result: dict):
+    def _render_feedback_form(self, result: dict, form_key_prefix: str = ""):
         """渲染策略反馈表单"""
         st.subheader("策略效果反馈")
         st.caption("帮助我们改进策略建议质量，请反馈您是否采纳了此策略及实际效果")
 
         strategy_id = result.get("strategy_id") or result.get("id", "")
+        form_key = f"feedback_form_{form_key_prefix}_{strategy_id}"
 
         # 检查是否已有反馈
         try:
@@ -370,7 +371,7 @@ class StrategyPage(BasePage):
                 st.info(f"**反馈备注:** {existing_feedback['feedback_notes']}")
             return
 
-        with st.form(key=f"feedback_form_{strategy_id}"):
+        with st.form(key=form_key):
             col1, col2 = st.columns(2)
 
             with col1:
@@ -577,7 +578,7 @@ class StrategyPage(BasePage):
                         # === 反馈入口 ===
                         st.markdown("---")
                         if not feedback:
-                            self._render_feedback_form(s)
+                            self._render_feedback_form(s, form_key_prefix="history")
                         else:
                             st.caption("✅ 已提交反馈，感谢您的参与！")
             else:

@@ -300,7 +300,7 @@ class MatchEngine(BaseAnalyzer):
         contents: List[Dict[str, Any]],
         leads: List[Dict[str, Any]],
         top_k: int = 3,
-        max_workers: int = 8,
+        max_workers: int = 12,
         progress_callback=None,
     ) -> List[Dict[str, Any]]:
         """批量匹配：每个线索找到最合适的top_k个内容（并发优化版）
