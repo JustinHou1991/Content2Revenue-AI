@@ -367,7 +367,7 @@ class MatchCenterPage(MatchPage):
         """展示历史匹配记录"""
         st.subheader("历史匹配记录")
         try:
-            records = self._get_orchestrator().db.get_all_match_results(limit=10)
+            records = self._get_orchestrator().db.get_all_match_results(limit=100)
             if records:
                 for idx, record in enumerate(records, 1):
                     mr = record.get("match_result_json", {})
