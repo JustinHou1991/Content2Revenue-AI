@@ -7,10 +7,9 @@ import streamlit as st
 import os
 import sys
 import traceback
-import logging
+import pathlib
 
 from dotenv import load_dotenv
-import pathlib
 _env_path = pathlib.Path(__file__).parent / ".env"
 if _env_path.exists():
     load_dotenv(dotenv_path=str(_env_path), override=False)
@@ -88,6 +87,9 @@ if "orchestrator" not in st.session_state:
     st.session_state.orchestrator = None
 if "initialized" not in st.session_state:
     st.session_state.initialized = False
+
+from ui.styles import inject_base_css
+inject_base_css()
 
 
 def _safe_error_message(error: Exception) -> str:

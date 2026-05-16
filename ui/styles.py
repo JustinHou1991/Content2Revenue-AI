@@ -1486,10 +1486,10 @@ COLORS = {
     "text_muted": "#606078",
     "text_placeholder": "#50506A",
     # 品牌色 - 温暖紫蓝渐变
-    "brand_primary": "#6C5CE7",
-    "brand_secondary": "#A78BFA",
-    "brand_gradient_start": "#6C5CE7",
-    "brand_gradient_end": "#A78BFA",
+    "brand_primary": "#6366F1",
+    "brand_secondary": "#818CF8",
+    "brand_gradient_start": "#6366F1",
+    "brand_gradient_end": "#818CF8",
     # 功能色
     "success": "#22C55E",
     "success_bg": "rgba(34, 197, 94, 0.1)",
@@ -1514,7 +1514,6 @@ COLORS = {
 
 _BASE_CSS = f"""
 /* ===== 全局重置 ===== */
-<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 .stApp {{
@@ -1773,7 +1772,6 @@ div[data-testid="stTextInput"] label {{
 .js-plotly-plot .plotly .modebar {{
     display: none !important;
 }}
-</style>
 """
 
 

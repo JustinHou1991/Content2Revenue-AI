@@ -11,7 +11,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from ui.base_page import AnalysisPage
+from ui.base_page import AnalysisPage, make_safe_progress
 from ui.components.forms import render_lead_form, render_action_buttons
 from ui.components.data_display import (
     render_lead_profile_details,
@@ -363,12 +363,7 @@ class LeadAnalysisPage(AnalysisPage):
         progress_bar = st.empty()
         status_text = st.empty()
 
-        def _safe_progress(val, text):
-            try:
-                progress_bar.progress(val, text=text)
-            except TypeError:
-                progress_bar.progress(val)
-                status_text.info(text)
+        _safe_progress = make_safe_progress(progress_bar, status_text)
 
         _safe_progress(0, f"准备分析 {total} 条线索...")
 
@@ -413,7 +408,6 @@ class LeadAnalysisPage(AnalysisPage):
                     completed += 1
                 pct = int(completed / total * 100)
                 _safe_progress(pct / 100, f"分析中 {completed}/{total} ({pct}%)")
-                status_text.info(f"⏳ 已完成 {completed}/{total} 条")
 
         successful_results = [r["data"] for r in results if r and r.get("success")]
         if successful_results:
@@ -435,41 +429,13 @@ class LeadAnalysisPage(AnalysisPage):
         success_count = sum(1 for r in results if r.get("success"))
         fail_count = sum(1 for r in results if not r.get("success"))
 
-        msg = f"批量分析完成！成功 {success_count}/{total} 条"
-        if fail_count > 0:
-            msg += f"（{fail_count} 条失败）"
-        callout(msg, type="success", icon="✅")
-
-        divider()
-        st.subheader("✅ 当前完成结果")
-
-        for i, r in enumerate(results):
-            if r.get("success"):
-                data = r.get("data", {})
-                profile = data.get("profile", data)
-                raw = data.get("raw_data", data.get("raw_data_json", {}))
-                lid = data.get("lead_id", "")[:8]
-                company = raw.get("company", raw.get("公司名称", ""))
-                name = raw.get("name", raw.get("联系人", ""))
-                score = profile.get("lead_score", 0)
-                grade = profile.get("lead_grade", "N/A")
-
-                label = f"{company}" if company else f"线索"
-                if name:
-                    label += f" · {name}"
-
-                with st.expander(
-                    f"#{i+1} [{lid}] {'🟢' if grade in ['A','B+'] else '🟡' if grade == 'B' else '🔴'} {grade}级 | {score}分 | {label}"
-                ):
-                    self._display_profile_simple(profile)
-            else:
-                with st.expander(f"线索 #{i+1} - 分析失败"):
-                    st.error(r.get("error", "未知错误"))
-
         st.session_state.lead_df = None
         st.session_state.lead_field_mapping = None
         if "lead_batch_state" in st.session_state:
             del st.session_state.lead_batch_state
+        st.session_state.lead_batch_results = results
+        st.session_state.lead_batch_success = success_count
+        st.session_state.lead_batch_fail = fail_count
         st.rerun()
 
     def _display_result(self, result: dict):

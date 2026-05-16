@@ -4,6 +4,17 @@ from typing import Optional, Dict, Any, List, Callable
 from abc import ABC, abstractmethod
 
 
+def make_safe_progress(progress_bar, status_text):
+    """创建兼容旧版 Streamlit 的进度回调函数"""
+    def safe_progress(val, text):
+        try:
+            progress_bar.progress(val, text=text)
+        except TypeError:
+            progress_bar.progress(val)
+            status_text.info(text)
+    return safe_progress
+
+
 class BasePage(ABC):
     """页面基类 - 提供统一的页面结构和公共功能"""
 
@@ -68,6 +79,19 @@ class BasePage(ABC):
         error_msg = f"{context}: {str(error)}" if context else str(error)
         self._render_callout(error_msg, type="error")
         st.info("请检查API Key是否有效，或稍后重试。")
+
+    @staticmethod
+    def _safe_progress(value: float, text: str = ""):
+        """安全渲染进度条，兼容旧版 Streamlit（< 1.37）"""
+        try:
+            if text:
+                st.progress(value, text=text)
+            else:
+                st.progress(value)
+        except TypeError:
+            st.progress(value)
+            if text:
+                st.caption(text)
 
     def _get_pagination_state_key(self, prefix: str) -> str:
         """获取分页状态键"""
@@ -134,7 +158,86 @@ class AnalysisPage(BasePage):
             self._render_batch_input()
 
         self._render_divider()
+
+        self._render_persisted_batch_results()
+
         self._render_history()
+
+    def _render_persisted_batch_results(self):
+        """渲染持久化的批量分析结果（st.rerun后恢复显示）"""
+        batch_key = f"{self.page_prefix}_batch_results"
+        success_key = f"{self.page_prefix}_batch_success"
+        fail_key = f"{self.page_prefix}_batch_fail"
+
+        results = st.session_state.pop(batch_key, None)
+        if not results:
+            return
+
+        success_count = st.session_state.pop(success_key, 0)
+        fail_count = st.session_state.pop(fail_key, 0)
+
+        from ui.components.design_system import callout, divider
+
+        try:
+            db = self._get_orchestrator().db
+            if self.page_prefix == "content":
+                db_count = len(db.get_all_content_analyses())
+            elif self.page_prefix == "lead":
+                db_count = len(db.get_all_lead_analyses())
+            else:
+                db_count = -1
+        except Exception:
+            db_count = -1
+
+        total = len(results)
+        msg = f"批量分析完成：共 {total} 条，成功 {success_count} 条"
+        if fail_count:
+            msg += f"，失败 {fail_count} 条"
+        if db_count >= 0:
+            msg += f" | 数据库共 {db_count} 条记录"
+        callout(msg, type="success", icon="✅")
+
+        divider()
+        st.subheader("分析结果")
+
+        for i, r in enumerate(results):
+            if r.get("success"):
+                data = r.get("data", {})
+                analysis = data.get("analysis", data)
+                profile = data.get("profile", data)
+                display_data = analysis or profile
+                raw = data.get("raw_data", data.get("raw_data_json", {}))
+
+                cid = data.get("content_id", data.get("lead_id", ""))[:8]
+                score = display_data.get("content_score", display_data.get("lead_score", "N/A"))
+                grade = display_data.get("lead_grade", "")
+
+                company = raw.get("company", raw.get("公司名称", ""))
+                name = raw.get("name", raw.get("联系人", ""))
+
+                title_parts = [f"#{i+1}"]
+                if cid:
+                    title_parts.append(f"[{cid}]")
+                if company:
+                    title_parts.append(company)
+                if name:
+                    title_parts.append(name)
+                if grade:
+                    emoji = "🟢" if grade in ["A", "B+"] else "🟡" if grade == "B" else "🔴"
+                    title_parts.append(f"{emoji} {grade}级")
+                score_str = f"评分 {score}/10" if isinstance(score, (int, float)) and score <= 10 else f"评分 {score}"
+                title_parts.append(score_str)
+
+                with st.expander(" · ".join(title_parts)):
+                    if hasattr(self, "_display_analysis"):
+                        self._display_analysis(display_data)
+                    elif hasattr(self, "_display_profile_simple"):
+                        self._display_profile_simple(display_data)
+                    else:
+                        st.json(display_data)
+            else:
+                with st.expander(f"#{i+1} - 分析失败"):
+                    st.error(r.get("error", "未知错误"))
 
     @abstractmethod
     def _render_single_input(self):
@@ -202,17 +305,6 @@ class AnalysisPage(BasePage):
 
         st.session_state[mapping_key] = user_mapping
         return user_mapping
-
-    def _render_batch_progress(self, total: int, current: int, prefix: str = ""):
-        """渲染批量处理进度（兼容旧版Streamlit）"""
-        progress_text = f"{prefix} ({current}/{total})" if prefix else f"正在处理... ({current}/{total})"
-        ratio = current / total if total > 0 else 0
-        try:
-            return st.progress(ratio, text=progress_text)
-        except TypeError:
-            bar = st.progress(ratio)
-            st.caption(progress_text)
-            return bar
 
 
 class MatchPage(BasePage):

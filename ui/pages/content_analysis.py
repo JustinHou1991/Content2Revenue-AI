@@ -11,7 +11,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from ui.base_page import AnalysisPage
+from ui.base_page import AnalysisPage, make_safe_progress
 from ui.components.forms import render_text_area, render_action_buttons
 from ui.components.data_display import (
     render_content_analysis_details,
@@ -259,12 +259,7 @@ class ContentAnalysisPage(AnalysisPage):
         progress_bar = st.empty()
         status_text = st.empty()
 
-        def _safe_progress(val, text):
-            try:
-                progress_bar.progress(val, text=text)
-            except TypeError:
-                progress_bar.progress(val)
-                status_text.info(text)
+        _safe_progress = make_safe_progress(progress_bar, status_text)
 
         _safe_progress(0, f"准备分析 {total} 条脚本...")
 
@@ -308,7 +303,6 @@ class ContentAnalysisPage(AnalysisPage):
                     completed += 1
                 pct = int(completed / total * 100)
                 _safe_progress(pct / 100, f"分析中 {completed}/{total} ({pct}%)")
-                status_text.info(f"⏳ 已完成 {completed}/{total} 条")
 
         successful_results = [r["data"] for r in results if r and r.get("success")]
         if successful_results:
@@ -330,39 +324,13 @@ class ContentAnalysisPage(AnalysisPage):
         success_count = sum(1 for r in results if r.get("success"))
         fail_count = sum(1 for r in results if not r.get("success"))
 
-        try:
-            db_count = len(self._get_orchestrator().db.get_all_content_analyses())
-        except Exception:
-            db_count = -1
-
-        msg = f"批量分析完成！成功 {success_count}/{total} 条"
-        if fail_count > 0:
-            msg += f"（{fail_count} 条失败）"
-        if db_count >= 0:
-            msg += f" | 数据库共 {db_count} 条记录"
-        callout(msg, type="success", icon="✅")
-
-        divider()
-        st.subheader("✅ 当前完成结果")
-
-        for i, r in enumerate(results):
-            if r.get("success"):
-                data = r.get("data", {})
-                analysis = data.get("analysis", data)
-                cid = data.get("content_id", "")[:8]
-                score = analysis.get("content_score", "N/A")
-                with st.expander(
-                    f"#{i+1} [{cid}] - 评分 {score}/10"
-                ):
-                    self._display_analysis(analysis)
-            else:
-                with st.expander(f"脚本 #{i+1} - 分析失败"):
-                    st.error(r.get("error", "未知错误"))
-
         st.session_state.content_df = None
         st.session_state.content_field_mapping = None
         if "batch_state" in st.session_state:
             del st.session_state.batch_state
+        st.session_state.content_batch_results = results
+        st.session_state.content_batch_success = success_count
+        st.session_state.content_batch_fail = fail_count
         st.rerun()
 
     def _parse_pdf(self, uploaded_file) -> "pd.DataFrame":

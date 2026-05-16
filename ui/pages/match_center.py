@@ -7,9 +7,7 @@
 import streamlit as st
 import logging
 
-logger = logging.getLogger(__name__)
-
-from ui.base_page import MatchPage
+from ui.base_page import MatchPage, make_safe_progress
 from ui.components.data_display import render_match_result_details
 from ui.components.design_system import (
     page_header,
@@ -19,6 +17,8 @@ from ui.components.design_system import (
     empty_state,
 )
 from ui.styles import COLORS
+
+logger = logging.getLogger(__name__)
 
 
 def _render_content_snapshot(snap: dict):
@@ -96,16 +96,35 @@ class MatchCenterPage(MatchPage):
             contents = self._get_orchestrator().db.get_all_content_analyses(limit=500)
             leads = self._get_orchestrator().db.get_all_lead_analyses(limit=500)
         except Exception as e:
-            callout(f"加载数据失败: {str(e)}", type="error")
+            logger.error("加载匹配数据失败: %s", e, exc_info=True)
+            callout("加载数据失败，请稍后重试", type="error")
             return
 
         if not contents:
-            callout("暂无内容分析记录，请先去「内容分析」页面分析脚本", type="warning")
-            st.info("提示：你可以在「系统设置」中点击「加载示例数据」快速体验。")
+            callout("暂无内容分析记录，请先分析内容脚本", type="warning")
+            st.info("提示：可以加载示例数据快速体验")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("📝 去分析内容", use_container_width=True, key="match_empty_goto_content"):
+                    st.session_state.nav_target = "content"
+                    st.rerun()
+            with col_b:
+                if st.button("🚀 加载示例数据", use_container_width=True, key="match_empty_load_samples"):
+                    from services.sample_data_loader import load_sample_data
+                    load_sample_data()
             return
         if not leads:
-            callout("暂无线索分析记录，请先去「线索分析」页面分析线索", type="warning")
-            st.info("提示：你可以在「系统设置」中点击「加载示例数据」快速体验。")
+            callout("暂无线索分析记录，请先分析线索", type="warning")
+            st.info("提示：可以加载示例数据快速体验")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("👤 去分析线索", use_container_width=True, key="match_empty_goto_lead"):
+                    st.session_state.nav_target = "lead"
+                    st.rerun()
+            with col_b:
+                if st.button("🚀 加载示例数据", use_container_width=True, key="match_empty_load_samples2"):
+                    from services.sample_data_loader import load_sample_data
+                    load_sample_data()
             return
 
         st.caption(f"📊 可选内容: {len(contents)} 条 | 可选线索: {len(leads)} 条")
@@ -192,12 +211,7 @@ class MatchCenterPage(MatchPage):
             progress_bar = st.empty()
             status_text = st.empty()
 
-            def _safe_progress(val, text):
-                try:
-                    progress_bar.progress(val, text=text)
-                except TypeError:
-                    progress_bar.progress(val)
-                    status_text.info(text)
+            _safe_progress = make_safe_progress(progress_bar, status_text)
 
             _safe_progress(0, f"正在并发匹配... 0/{total_tasks}")
 
@@ -313,7 +327,8 @@ class MatchCenterPage(MatchPage):
             c_score = content_snap.get("content_score", "?")
             audience = content_snap.get("target_audience", "未知")
             tags = content_snap.get("topic_tags", [])
-            st.info(f"**{hook}** · {category} | 评分 {c_score}/10 | 受众: {audience}")
+            with st.container(border=True):
+                st.caption(f"**{hook}** · {category} | 评分 {c_score}/10 | 受众: {audience}")
             if tags:
                 st.caption(f"话题: {', '.join(tags)}")
             # 详细信息折叠
@@ -327,7 +342,8 @@ class MatchCenterPage(MatchPage):
             grade = lead_snap.get("lead_grade", "?")
             intent = lead_snap.get("intent_level", "?")
             pains = lead_snap.get("pain_points", [])
-            st.info(f"**{industry}** · {stage} | {grade}级 {l_score}/100 | 意向 {intent}/10")
+            with st.container(border=True):
+                st.caption(f"**{industry}** · {stage} | {grade}级 {l_score}/100 | 意向 {intent}/10")
             if pains:
                 st.caption(f"痛点: {', '.join(pains[:3])}")
             with st.expander("查看完整线索画像"):
@@ -361,7 +377,7 @@ class MatchCenterPage(MatchPage):
             with col2:
                 if follow_up:
                     st.markdown("#### 💡 跟进建议")
-                    st.info(follow_up)
+                    st.markdown(follow_up)
 
     def _render_history(self):
         """展示历史匹配记录"""
@@ -437,7 +453,7 @@ class MatchCenterPage(MatchPage):
                         if follow_up:
                             st.markdown("---")
                             st.markdown("**💡 跟进建议**")
-                            st.info(follow_up)
+                            st.markdown(follow_up)
             else:
                 empty_state(
                     title="暂无匹配记录",
