@@ -19,6 +19,7 @@ python-docx>=0.8.11
 # === 配置与加密 ===
 pyyaml>=6.0
 cryptography>=41.0
+python-dotenv>=1.0.0
 
 # === 认证（可选，按需加载） ===
 pyjwt>=2.8.0

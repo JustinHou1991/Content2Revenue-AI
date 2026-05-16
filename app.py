@@ -9,6 +9,9 @@ import sys
 import traceback
 import logging
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -41,7 +44,7 @@ logger = get_logger(__name__)
 # 固化模型配置（免费API Key，仅用于展示测试）
 # ============================================================
 DEFAULT_MODEL = os.environ.get("C2R_DEFAULT_MODEL", "LongCat-2.0-Preview")
-DEFAULT_API_KEY = os.environ.get("C2R_API_KEY", "")
+DEFAULT_API_KEY = os.environ.get("LONGCAT_API_KEY", "") or os.environ.get("C2R_API_KEY", "")
 
 # 初始化session state
 if "orchestrator" not in st.session_state:
