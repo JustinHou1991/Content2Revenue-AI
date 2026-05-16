@@ -304,10 +304,15 @@ class StrategyPage(BasePage):
 
         _safe_progress(0, f"准备生成 {total} 条策略...")
 
-        results = self._get_orchestrator().batch_generate_strategies(match_ids)
+        def _on_strategy_progress(completed, total_count):
+            pct = completed / total_count if total_count > 0 else 0
+            _safe_progress(pct, f"生成策略中 {completed}/{total_count} ({int(pct * 100)}%)")
 
-        progress_bar.empty()
-        status_text.empty()
+        results = self._get_orchestrator().batch_generate_strategies(
+            match_ids, progress_callback=_on_strategy_progress
+        )
+
+        _safe_progress(1.0, f"策略生成完成 {total}/{total} (100%)")
 
         success_count = sum(1 for r in results if r and r.get("success"))
         fail_count = total - success_count

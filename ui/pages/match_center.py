@@ -189,8 +189,27 @@ class MatchCenterPage(MatchPage):
             st.warning("⚠️ **匹配中，请勿切换页面**，完成后将自动显示结果。")
             st.info(f"共 {total_leads} 条线索 × {len(contents)} 条内容 = {total_tasks} 次匹配，并发处理中...")
 
-            with st.spinner(f"正在并发匹配 {total_tasks} 对内容-线索组合..."):
-                results = orchestrator.batch_match(top_k)
+            progress_bar = st.empty()
+            status_text = st.empty()
+
+            def _safe_progress(val, text):
+                try:
+                    progress_bar.progress(val, text=text)
+                except TypeError:
+                    progress_bar.progress(val)
+                    status_text.info(text)
+
+            _safe_progress(0, f"正在并发匹配... 0/{total_tasks}")
+
+            def _on_match_progress(completed, total):
+                pct = completed / total if total > 0 else 0
+                _safe_progress(pct, f"匹配中 {completed}/{total} ({int(pct * 100)}%)")
+
+            results = orchestrator.batch_match(top_k, progress_callback=_on_match_progress)
+
+            _safe_progress(1.0, f"匹配完成！共 {total_tasks} 次匹配 ({int(100)}%)")
+            progress_bar.empty()
+            status_text.empty()
 
             valid_results = [r for r in results if r is not None]
             self._render_batch_match_results(valid_results)

@@ -301,6 +301,7 @@ class MatchEngine(BaseAnalyzer):
         leads: List[Dict[str, Any]],
         top_k: int = 3,
         max_workers: int = 8,
+        progress_callback=None,
     ) -> List[Dict[str, Any]]:
         """批量匹配：每个线索找到最合适的top_k个内容（并发优化版）
 
@@ -309,6 +310,7 @@ class MatchEngine(BaseAnalyzer):
             leads: LeadAnalyzer输出列表（每个含profile字段，可选lead_id和raw_data字段）
             top_k: 每个线索返回的匹配内容数量
             max_workers: 并发线程数，默认8
+            progress_callback: 进度回调函数 callback(completed, total)
 
         Returns:
             匹配结果列表（顺序与输入leads顺序一致）
@@ -445,7 +447,6 @@ class MatchEngine(BaseAnalyzer):
                     completed_count += 1
                     current_count = completed_count
                     current_errors = error_count
-                # 在锁外读取，避免竞态，但可能读到稍旧的值（可接受）
                 if current_count % 10 == 0 or current_count == total_tasks:
                     logger.info(
                         "匹配进度: %d/%d (成功: %d, 失败: %d)",
@@ -454,6 +455,11 @@ class MatchEngine(BaseAnalyzer):
                         current_count - current_errors,
                         current_errors,
                     )
+                if progress_callback:
+                    try:
+                        progress_callback(current_count, total_tasks)
+                    except Exception:
+                        pass
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [
@@ -466,7 +472,9 @@ class MatchEngine(BaseAnalyzer):
             # 等待所有任务完成，捕获可能的取消异常
             for future in as_completed(futures):
                 try:
-                    future.result()
+                    future.result(timeout=300)
+                except TimeoutError:
+                    logger.error("匹配任务超时(5分钟)")
                 except Exception as e:
                     logger.error("线程池任务执行异常: %s", e, exc_info=True)
 

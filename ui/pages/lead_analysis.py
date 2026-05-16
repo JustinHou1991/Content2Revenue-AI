@@ -390,15 +390,23 @@ class LeadAnalysisPage(AnalysisPage):
                 logger.error(f"线索分析失败 (item {index+1}/{total}): {e}")
                 return index, {"success": False, "error": str(e)}
 
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(analyze_one, i, leads[i]): i
                 for i in range(total)
             }
             for future in as_completed(futures):
-                idx, result = future.result()
+                try:
+                    idx, result = future.result(timeout=300)
+                except TimeoutError:
+                    logger.error("线索分析超时 (item in batch)")
+                    idx = futures[future]
+                    result = {"success": False, "error": "分析超时(5分钟)，请检查网络或API状态"}
+                except Exception as exc:
+                    logger.error(f"线索分析线程异常: {exc}")
+                    idx = futures[future]
+                    result = {"success": False, "error": str(exc)}
                 results[idx] = result
                 with completed_lock:
                     completed += 1
@@ -406,14 +414,12 @@ class LeadAnalysisPage(AnalysisPage):
                 _safe_progress(pct / 100, f"分析中 {completed}/{total} ({pct}%)")
                 status_text.info(f"⏳ 已完成 {completed}/{total} 条")
 
-        progress_bar.empty()
-        status_text.empty()
-
         successful_results = [r["data"] for r in results if r and r.get("success")]
         if successful_results:
-            status_text.info(f"正在保存 {len(successful_results)} 条结果到数据库...")
             orchestrator.db.save_lead_analyses_batch(successful_results)
-        status_text.empty()
+            _safe_progress(1.0, f"分析完成！共保存 {len(successful_results)} 条结果 ({int(completed / total * 100)}%)")
+        else:
+            _safe_progress(1.0, "分析完成，但无成功结果")
 
         state = {
             "results": results,

@@ -4,6 +4,8 @@
 """
 
 import streamlit as st
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from ui.components.design_system import (
     page_header,
@@ -17,7 +19,7 @@ from ui.styles import COLORS
 
 
 def _load_sample_data():
-    """加载示例数据（内容分析 + 线索分析）"""
+    """加载示例数据（并发优化版：6次LLM调用并发执行）"""
     try:
         from data.sample_data import SAMPLE_SCRIPTS, SAMPLE_LEADS
 
@@ -30,30 +32,60 @@ def _load_sample_data():
             bar = progress_bar.progress(0)
             status_text.caption("正在加载示例数据...")
 
+        orchestrator = st.session_state.get("orchestrator")
+        if not orchestrator:
+            st.error("系统未初始化，请先配置API Key")
+            return
+
         total = len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)
+        completed = 0
+        lock = threading.Lock()
 
-        for i, sample in enumerate(SAMPLE_SCRIPTS):
+        def _analyze_script(index, sample):
             try:
-                if st.session_state.get("orchestrator"):
-                    st.session_state.orchestrator.analyze_content(sample["script_text"])
+                orchestrator.analyze_content(sample["script_text"])
+                return index, True, sample["script_id"]
             except Exception as e:
-                st.warning(f"示例脚本 {sample['script_id']} 分析失败: {e}")
-            try:
-                bar.progress((i + 1) / total, text=f"加载示例数据... {i+1}/{total}")
-            except TypeError:
-                bar.progress((i + 1) / total)
+                return index, False, f"{sample['script_id']}: {e}"
 
-        for j, sample in enumerate(SAMPLE_LEADS):
+        def _analyze_lead(index, sample):
             try:
-                if st.session_state.get("orchestrator"):
-                    st.session_state.orchestrator.analyze_lead(sample["lead_data"])
+                orchestrator.analyze_lead(sample["lead_data"])
+                return index, True, sample["lead_id"]
             except Exception as e:
-                st.warning(f"示例线索 {sample['lead_id']} 分析失败: {e}")
-            try:
-                bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / total,
-                             text=f"加载示例数据... {len(SAMPLE_SCRIPTS)+j+1}/{total}")
-            except TypeError:
-                bar.progress((len(SAMPLE_SCRIPTS) + j + 1) / total)
+                return index, False, f"{sample['lead_id']}: {e}"
+
+        all_futures = {}
+
+        with ThreadPoolExecutor(max_workers=min(6, total)) as executor:
+            for i, sample in enumerate(SAMPLE_SCRIPTS):
+                all_futures[executor.submit(_analyze_script, i, sample)] = ("script", i)
+
+            offset = len(SAMPLE_SCRIPTS)
+            for j, sample in enumerate(SAMPLE_LEADS):
+                all_futures[executor.submit(_analyze_lead, j, sample)] = ("lead", offset + j)
+
+            for future in as_completed(all_futures):
+                tag, pos = all_futures[future]
+                try:
+                    idx, success, label = future.result(timeout=300)
+                    with lock:
+                        completed += 1
+                        pct = completed / total
+                        try:
+                            bar.progress(pct, text=f"加载示例数据... {completed}/{total}")
+                        except TypeError:
+                            bar.progress(pct)
+                except TimeoutError:
+                    with lock:
+                        completed += 1
+                        if tag == "script":
+                            st.warning(f"示例脚本超时")
+                        else:
+                            st.warning(f"示例线索超时")
+                except Exception:
+                    with lock:
+                        completed += 1
 
         progress_bar.empty()
         status_text.empty()

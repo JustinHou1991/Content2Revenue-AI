@@ -152,13 +152,15 @@ class Orchestrator:
         return strategy
 
     def batch_generate_strategies(
-        self, match_ids: Optional[List[str]] = None, max_workers: int = 4
+        self, match_ids: Optional[List[str]] = None, max_workers: int = 4,
+        progress_callback=None
     ) -> List[Dict[str, Any]]:
         """批量生成策略建议（并发优化版）
 
         Args:
             match_ids: 匹配结果ID列表，为None时自动获取所有匹配结果
             max_workers: 并发线程数，默认4（策略生成较重，不宜过高）
+            progress_callback: 进度回调，签名为 callback(completed: int, total: int)
 
         Returns:
             策略生成结果列表（含成功/失败标记）
@@ -203,10 +205,25 @@ class Orchestrator:
                 for i in range(total)
             }
             for future in as_completed(futures):
-                idx, result = future.result()
+                try:
+                    idx, result = future.result(timeout=300)
+                except TimeoutError:
+                    logger.error("策略生成超时 (item in batch)")
+                    idx = futures[future]
+                    result = {"success": False, "error": "策略生成超时(5分钟)", "match_id": "unknown"}
+                except Exception as exc:
+                    logger.error(f"策略生成线程异常: {exc}")
+                    idx = futures[future]
+                    result = {"success": False, "error": str(exc), "match_id": "unknown"}
                 results[idx] = result
                 with lock:
                     completed += 1
+                    current = completed
+                if progress_callback:
+                    try:
+                        progress_callback(current, total)
+                    except Exception:
+                        pass
 
         success_count = sum(1 for r in results if r and r.get("success"))
         logger.info("批量策略生成完成: 成功=%d/%d", success_count, total)
@@ -325,12 +342,13 @@ class Orchestrator:
         logger.info("批量线索分析完成, 成功=%d/%d", saved_count, len(leads))
         return results
 
-    def batch_match(self, top_k: int = 3) -> List[Dict[str, Any]]:
+    def batch_match(self, top_k: int = 3, progress_callback=None) -> List[Dict[str, Any]]:
         """
         批量匹配：所有内容 × 所有线索
 
         Args:
             top_k: 每个线索返回的匹配数量
+            progress_callback: 进度回调 callback(completed, total)
 
         Returns:
             匹配结果列表
@@ -360,7 +378,9 @@ class Orchestrator:
             for lead in leads
         ]
 
-        results = self.match_engine.batch_match(content_list, lead_list, top_k)
+        results = self.match_engine.batch_match(
+            content_list, lead_list, top_k, progress_callback=progress_callback
+        )
 
         # 收集匹配结果，注入 content_id 和 lead_id
         match_results_to_save = []
