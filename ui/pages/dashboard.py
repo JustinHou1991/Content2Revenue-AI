@@ -14,7 +14,126 @@ from ui.components.design_system import (
     callout,
 )
 from ui.styles import COLORS
+from ui.components.charts import score_gauge, funnel_chart, distribution_chart
 from services.sample_data_loader import load_sample_data
+
+
+def render_score_gauges(data: dict):
+    """渲染评分仪表盘"""
+    st.subheader("核心评分指标")
+
+    avg_content = data.get("avg_content_score_recent", 0)
+    avg_lead = data.get("avg_lead_score_recent", 0)
+    avg_match = data.get("avg_match_score_recent", 0)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        content_val = float(avg_content) if isinstance(avg_content, (int, float)) else 0
+        if content_val > 0:
+            fig = score_gauge(
+                value=content_val,
+                max_value=10,
+                title="内容评分",
+                size=200,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        lead_val = float(avg_lead) if isinstance(avg_lead, (int, float)) else 0
+        if lead_val > 0:
+            fig = score_gauge(
+                value=lead_val,
+                max_value=100,
+                title="线索评分",
+                size=200,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col3:
+        match_val = float(avg_match) if isinstance(avg_match, (int, float)) else 0
+        if match_val > 0:
+            fig = score_gauge(
+                value=match_val,
+                max_value=10,
+                title="匹配度",
+                size=200,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def render_score_distribution(data: dict):
+    """渲染评分分布图"""
+    try:
+        contents = data.get("recent_contents", [])
+        if not contents:
+            return
+
+        scores = []
+        for item in contents:
+            analysis = item.get("analysis_json", {})
+            score = analysis.get("content_score", 0)
+            try:
+                scores.append(float(score))
+            except (ValueError, TypeError):
+                pass
+
+        if not scores:
+            return
+
+        buckets = {"1-2": 0, "3-4": 0, "5-6": 0, "7-8": 0, "9-10": 0}
+        for s in scores:
+            if s <= 2:
+                buckets["1-2"] += 1
+            elif s <= 4:
+                buckets["3-4"] += 1
+            elif s <= 6:
+                buckets["5-6"] += 1
+            elif s <= 8:
+                buckets["7-8"] += 1
+            else:
+                buckets["9-10"] += 1
+
+        fig = distribution_chart(
+            values=list(buckets.values()),
+            labels=list(buckets.keys()),
+            title="内容评分分布",
+            color="primary",
+        )
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        pass
+
+
+def render_lead_distribution(data: dict):
+    """渲染线索等级分布图"""
+    try:
+        leads = data.get("recent_leads", [])
+        if not leads:
+            return
+
+        grades = {"A": 0, "B+": 0, "B": 0, "C+": 0, "C": 0, "D": 0}
+        for item in leads:
+            profile = item.get("profile_json", {})
+            grade = profile.get("lead_grade", "")
+            if grade in grades:
+                grades[grade] += 1
+
+        valid_grades = {k: v for k, v in grades.items() if v > 0}
+        if not valid_grades:
+            return
+
+        fig = distribution_chart(
+            values=list(valid_grades.values()),
+            labels=list(valid_grades.keys()),
+            title="线索等级分布",
+            color="success",
+        )
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        pass
 
 
 def render_dashboard():
@@ -158,31 +277,8 @@ def render_dashboard():
 
     divider()
 
-    # 平均分指标（基于最近 N 条记录）
-    score_basis = data.get("score_basis_count", 5)
-    metric_row([
-        {
-            "title": "平均内容评分",
-            "value": f"{data['avg_content_score_recent']}/10",
-            "subtitle": f"最近 {score_basis} 条",
-            "icon": "📊",
-            "trend": "neutral",
-        },
-        {
-            "title": "平均线索评分",
-            "value": f"{data['avg_lead_score_recent']}/100",
-            "subtitle": f"最近 {score_basis} 条",
-            "icon": "🗂️",
-            "trend": "neutral",
-        },
-        {
-            "title": "平均匹配度",
-            "value": f"{data['avg_match_score_recent']}/10",
-            "subtitle": f"最近 {score_basis} 条",
-            "icon": "🎯",
-            "trend": "neutral",
-        },
-    ], columns=3, key="dashboard_avg")
+    # 评分仪表盘（可视化环形进度条）
+    render_score_gauges(data)
 
     divider()
 

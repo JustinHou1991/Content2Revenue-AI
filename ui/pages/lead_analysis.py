@@ -774,6 +774,12 @@ class LeadAnalysisPage(AnalysisPage):
         """展示历史记录"""
         st.subheader("历史分析记录")
         try:
+            # 搜索过滤
+            search_query = self._render_search_filter(
+                "lead_history",
+                placeholder="搜索公司名、行业、等级、痛点...",
+            )
+
             # 分页参数
             page_size = 10
             page = self._get_current_page("lead_history")
@@ -802,6 +808,25 @@ class LeadAnalysisPage(AnalysisPage):
                     icon="🗂️",
                 )
                 return
+
+            # 搜索过滤
+            if search_query:
+                query_lower = search_query.lower()
+                filtered = []
+                for record in records:
+                    profile = record.get("profile_json", {})
+                    raw = record.get("raw_data_json", {})
+                    searchable = " ".join([
+                        str(raw.get("company", "")),
+                        str(raw.get("name", "")),
+                        str(profile.get("industry", "")),
+                        str(profile.get("lead_grade", "")),
+                        " ".join(profile.get("pain_points", [])),
+                        str(profile.get("intent_level", "")),
+                    ]).lower()
+                    if query_lower in searchable:
+                        filtered.append(record)
+                records = filtered
 
             for record in records:
                 profile = record.get("profile_json", {})

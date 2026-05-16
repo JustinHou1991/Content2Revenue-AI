@@ -135,6 +135,32 @@ class BasePage(ABC):
                 self._set_page(prefix, current_page + 1)
                 st.rerun()
 
+    def _render_search_filter(self, prefix: str, placeholder: str = "输入关键词搜索...") -> str:
+        """渲染搜索过滤框"""
+        search_key = f"{prefix}_search_query"
+        if search_key not in st.session_state:
+            st.session_state[search_key] = ""
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            query = st.text_input(
+                "搜索记录",
+                value=st.session_state[search_key],
+                placeholder=placeholder,
+                label_visibility="collapsed",
+                key=f"{prefix}_search_input",
+            )
+        with col2:
+            if st.button("清空", key=f"{prefix}_clear_search"):
+                st.session_state[search_key] = ""
+                st.rerun()
+
+        if query != st.session_state[search_key]:
+            st.session_state[search_key] = query
+            self._set_page(prefix, 0)
+
+        return st.session_state[search_key]
+
 
 class AnalysisPage(BasePage):
     """分析页面基类 - 用于内容分析和线索分析等具有相似结构的页面"""
@@ -253,6 +279,46 @@ class AnalysisPage(BasePage):
     def _render_history(self):
         """渲染历史记录"""
         pass
+
+    def _render_search_filter(self, prefix: str, placeholder: str = "输入关键词搜索...") -> str:
+        """渲染搜索过滤框"""
+        search_key = f"{prefix}_search_query"
+        if search_key not in st.session_state:
+            st.session_state[search_key] = ""
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            query = st.text_input(
+                "搜索记录",
+                value=st.session_state[search_key],
+                placeholder=placeholder,
+                label_visibility="collapsed",
+                key=f"{prefix}_search_input",
+            )
+        with col2:
+            if st.button("清空", key=f"{prefix}_clear_search"):
+                st.session_state[search_key] = ""
+                st.rerun()
+
+        if query != st.session_state[search_key]:
+            st.session_state[search_key] = query
+            self._set_page(prefix, 0)
+
+        return st.session_state[search_key]
+
+    def _get_pagination_state_key(self, prefix: str) -> str:
+        """获取分页状态键"""
+        return f"{prefix}_page"
+
+    def _get_current_page(self, prefix: str) -> int:
+        """获取当前页码"""
+        key = self._get_pagination_state_key(prefix)
+        return st.session_state.get(key, 0)
+
+    def _set_page(self, prefix: str, page: int):
+        """设置当前页码"""
+        key = self._get_pagination_state_key(prefix)
+        st.session_state[key] = page
 
     def _handle_file_upload(self, file_type: str = "csv") -> Optional[Any]:
         """处理文件上传"""

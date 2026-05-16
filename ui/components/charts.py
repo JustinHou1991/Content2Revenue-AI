@@ -789,6 +789,98 @@ def donut_chart(
 
 
 # ============================================================
+# 评分环形进度条
+# ============================================================
+def score_gauge(
+    value: float,
+    max_value: float = 10,
+    title: str = "",
+    subtitle: str = "",
+    size: int = 200,
+    key: Optional[str] = None,
+) -> Any:
+    """
+    评分环形进度条组件，适用于单指标评分展示。
+
+    参数:
+        value:      评分值
+        max_value:  满分值
+        title:      指标名称
+        subtitle:   补充说明
+        size:       图表尺寸
+        key:        Streamlit 唯一键
+
+    返回:
+        Plotly Figure 对象
+    """
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        st.error("请安装 plotly: pip install plotly")
+        return None
+
+    percentage = (value / max_value) * 100 if max_value > 0 else 0
+
+    if percentage >= 80:
+        color = COLORS["success"]
+        level = "优秀"
+    elif percentage >= 60:
+        color = COLORS["warning"]
+        level = "良好"
+    elif percentage >= 40:
+        color = COLORS["orange"]
+        level = "一般"
+    else:
+        color = COLORS["error"]
+        level = "需改进"
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Indicator(
+        mode="gauge+number+delta",
+        value=value,
+        domain={"x": [0, 1], "y": [0, 1]},
+        title={"text": title, "font": {"size": 14, "color": TEXT_SECONDARY}},
+        number={"font": {"size": 36, "color": color, "family": "Inter, system-ui, sans-serif"}},
+        delta={"reference": max_value * 0.6, "relative": True, "font": {"size": 12, "color": TEXT_TERTIARY}},
+        gauge={
+            "axis": {
+                "range": [0, max_value],
+                "tickwidth": 0,
+                "tickcolor": "transparent",
+                "visible": False,
+            },
+            "bar": {
+                "color": color,
+                "thickness": 0.75,
+            },
+            "bgcolor": "transparent",
+            "borderwidth": 0,
+            "bordercolor": "transparent",
+            "steps": [
+                {"range": [0, max_value * 0.4], "color": "rgba(239, 68, 68, 0.15)"},
+                {"range": [max_value * 0.4, max_value * 0.6], "color": "rgba(249, 115, 22, 0.15)"},
+                {"range": [max_value * 0.6, max_value * 0.8], "color": "rgba(245, 158, 11, 0.15)"},
+                {"range": [max_value * 0.8, max_value], "color": "rgba(16, 185, 129, 0.15)"},
+            ],
+        },
+    ))
+
+    fig.update_layout(
+        **create_chart_theme(),
+        height=size,
+        width=size,
+        margin=dict(l=20, r=20, t=40, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    fig.update_config(displayModeBar=False)
+
+    return fig
+
+
+# ============================================================
 # 热力图
 # ============================================================
 def heatmap_chart(

@@ -383,8 +383,35 @@ class MatchCenterPage(MatchPage):
         """展示历史匹配记录"""
         st.subheader("历史匹配记录")
         try:
+            # 搜索过滤
+            search_query = self._render_search_filter(
+                "match_history",
+                placeholder="搜索 Hook 类型、公司、行业、等级...",
+            )
+
             records = self._get_orchestrator().db.get_all_match_results(limit=100)
             if records:
+                # 搜索过滤
+                if search_query:
+                    query_lower = search_query.lower()
+                    filtered = []
+                    for record in records:
+                        content_snap = record.get("content_snapshot_json", {})
+                        lead_snap = record.get("lead_snapshot_json", {})
+                        mr = record.get("match_result_json", {})
+                        searchable = " ".join([
+                            str(content_snap.get("hook_type", "")),
+                            str(content_snap.get("content_category", "")),
+                            " ".join(content_snap.get("topic_tags", [])),
+                            str(lead_snap.get("industry", "")),
+                            str(lead_snap.get("lead_grade", "")),
+                            " ".join(lead_snap.get("pain_points", [])),
+                            str(mr.get("match_reason", ""))[:200],
+                        ]).lower()
+                        if query_lower in searchable:
+                            filtered.append(record)
+                    records = filtered
+
                 for idx, record in enumerate(records, 1):
                     mr = record.get("match_result_json", {})
                     score_raw = mr.get("overall_score", 0)
