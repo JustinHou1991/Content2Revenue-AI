@@ -50,9 +50,12 @@ DEFAULT_MODEL = os.environ.get("C2R_DEFAULT_MODEL", "LongCat-2.0-Preview")
 
 def _resolve_default_api_key() -> str:
     """多源解析默认 API Key（Streamlit Cloud 兼容）"""
+    # 1. 环境变量
     key = os.environ.get("LONGCAT_API_KEY") or os.environ.get("C2R_API_KEY")
     if key:
         return key
+
+    # 2. st.secrets（Streamlit Cloud）
     try:
         if "LONGCAT_API_KEY" in st.secrets:
             return st.secrets["LONGCAT_API_KEY"]
@@ -60,6 +63,22 @@ def _resolve_default_api_key() -> str:
             return st.secrets["C2R_API_KEY"]
     except Exception:
         pass
+
+    # 3. 直接读取 .streamlit/secrets.toml 文件（兼容方案）
+    try:
+        _secrets_path = pathlib.Path(__file__).parent / ".streamlit" / "secrets.toml"
+        if _secrets_path.exists():
+            import tomllib
+            with open(_secrets_path, "rb") as f:
+                _data = tomllib.load(f)
+                if isinstance(_data, dict):
+                    if "LONGCAT_API_KEY" in _data:
+                        return _data["LONGCAT_API_KEY"]
+                    if "C2R_API_KEY" in _data:
+                        return _data["C2R_API_KEY"]
+    except Exception:
+        pass
+
     return ""
 
 DEFAULT_API_KEY = _resolve_default_api_key()
