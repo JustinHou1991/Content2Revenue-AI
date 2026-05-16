@@ -156,6 +156,7 @@ class AnalysisPage(BasePage):
         uploaded = st.file_uploader(
             f"上传{file_type.upper()}文件",
             type=[file_type],
+            key=f"{self.page_prefix}_file_uploader_{file_type}",
         )
 
         if uploaded is None:

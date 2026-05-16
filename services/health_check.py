@@ -13,7 +13,13 @@ logger = logging.getLogger(__name__)
 class HealthChecker:
     """健康检查器"""
 
-    def __init__(self, db_path: str = "data/content2revenue.db"):
+    def __init__(self, db_path: str = ""):
+        if not db_path:
+            try:
+                from config import get_config
+                db_path = get_config().get("db_path", "data/c2r.db")
+            except Exception:
+                db_path = "data/c2r.db"
         self.db_path = db_path
         self._checks = {}
 
@@ -25,9 +31,8 @@ class HealthChecker:
         """检查数据库健康"""
         start = time.time()
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("SELECT 1")
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("SELECT 1")
             return {
                 "status": "healthy",
                 "latency_ms": round((time.time() - start) * 1000, 2)
@@ -40,7 +45,6 @@ class HealthChecker:
 
     def check_disk_space(self) -> Dict[str, Any]:
         """检查磁盘空间"""
-        import shutil
         try:
             stat = shutil.disk_usage(os.path.abspath(os.sep))
             free_gb = stat.free / (1024**3)

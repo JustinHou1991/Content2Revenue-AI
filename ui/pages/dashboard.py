@@ -206,6 +206,7 @@ def render_dashboard():
             "前往系统设置",
             type="primary",
             use_container_width=True,
+            key="dashboard_goto_settings",
         ):
             st.session_state.nav_target = "settings"
             st.rerun()
@@ -221,15 +222,15 @@ def render_dashboard():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("📝 分析新内容", use_container_width=True, type="primary"):
+            if st.button("📝 分析新内容", use_container_width=True, type="primary", key="dashboard_empty_goto_content"):
                 st.session_state.nav_target = "content"
                 st.rerun()
         with col2:
-            if st.button("👤 录入新线索", use_container_width=True, type="primary"):
+            if st.button("👤 录入新线索", use_container_width=True, type="primary", key="dashboard_empty_goto_lead"):
                 st.session_state.nav_target = "lead"
                 st.rerun()
         with col3:
-            if st.button("🚀 加载示例数据", use_container_width=True, type="primary"):
+            if st.button("🚀 加载示例数据", use_container_width=True, type="primary", key="dashboard_load_samples"):
                 _load_sample_data()
         return
 
@@ -267,11 +268,11 @@ def render_dashboard():
     st.subheader("快速操作")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("分析新脚本", use_container_width=True, type="primary"):
+        if st.button("分析新脚本", use_container_width=True, type="primary", key="dashboard_quick_content"):
             st.session_state.nav_target = "content"
             st.rerun()
     with col2:
-        if st.button("录入新线索", use_container_width=True, type="primary"):
+        if st.button("录入新线索", use_container_width=True, type="primary", key="dashboard_quick_lead"):
             st.session_state.nav_target = "lead"
             st.rerun()
 

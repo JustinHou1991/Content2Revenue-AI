@@ -348,7 +348,7 @@ class LeadAnalyzer(BaseAnalyzer):
             try:
                 prev_time = datetime.fromisoformat(previous_created)
                 days_in_previous = (datetime.now() - prev_time).days
-            except:
+            except (ValueError, TypeError):
                 days_in_previous = None
         else:
             days_in_previous = None
@@ -419,7 +419,7 @@ class LeadAnalyzer(BaseAnalyzer):
 
             try:
                 result = self.analyze(
-                    lead_data=lead["lead_data"],
+                    lead_data=lead.get("lead_data", {}),
                     lead_id=lead.get("lead_id"),
                 )
                 results.append(
@@ -473,7 +473,7 @@ class LeadAnalyzer(BaseAnalyzer):
         profiles: List[Dict[str, Any]] = [
             r["data"]["profile"]
             for r in analysis_results
-            if r.get("success", True) and "data" in r
+            if r.get("success", True) and isinstance(r.get("data"), dict) and "profile" in r["data"]
         ]
 
         if not profiles:

@@ -107,6 +107,7 @@ def render_settings():
             all_models,
             index=default_idx,
             format_func=_model_display_name,
+            key="settings_model_select",
         )
 
         # 自定义模型不需要手动输入 API Key
@@ -120,9 +121,10 @@ def render_settings():
                 type="password",
                 value=saved_api_key if saved_api_key else "",
                 placeholder="sk-...",
+                key="settings_api_key_input",
             )
 
-        if st.button("保存并连接", type="primary", use_container_width=True):
+        if st.button("保存并连接", type="primary", use_container_width=True, key="settings_save_btn"):
             if not is_custom and not api_key:
                 st.error("请输入 API Key")
                 return

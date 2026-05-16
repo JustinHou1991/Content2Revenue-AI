@@ -144,9 +144,8 @@ def _read_from_secrets(cfg: AppConfig) -> None:
                 except (ValueError, TypeError) as e:
                     logger.warning("secrets.toml 中 %s 值无效 (%s): %s",
                                    secret_key, e, value)
-    except Exception:
-        # Streamlit 未运行或 secrets 不可用，静默跳过
-        logger.debug("secrets.toml 不可用，跳过")
+    except Exception as e:
+        logger.warning("secrets.toml 读取失败: %s", e)
 
 
 def _read_from_database(cfg: AppConfig) -> None:
@@ -195,7 +194,7 @@ def _read_from_database(cfg: AppConfig) -> None:
         finally:
             conn.close()
     except Exception as e:
-        logger.debug("从数据库读取配置失败，跳过: %s", e)
+        logger.warning("从数据库读取配置失败: %s", e)
 
 
 # ---------------------------------------------------------------------------

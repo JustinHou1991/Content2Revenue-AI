@@ -201,6 +201,7 @@ class ContentAnalysisPage(AnalysisPage):
                     f"开始批量分析（{len(df)} 条脚本）",
                     type="primary",
                     use_container_width=True,
+                    key="content_batch_analyze_btn",
                 )
 
                 if batch_btn:

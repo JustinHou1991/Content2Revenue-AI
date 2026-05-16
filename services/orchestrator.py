@@ -60,7 +60,10 @@ class Orchestrator:
         """
         logger.info("开始分析内容 (文本长度=%d)", len(script_text))
         result = self.content_analyzer.analyze(script_text)
-        self.db.save_content_analysis(result, conn=conn)
+        try:
+            self.db.save_content_analysis(result, conn=conn)
+        except Exception as e:
+            logger.error("保存内容分析结果失败: %s", e, exc_info=True)
         logger.info("内容分析完成, content_id=%s", result.get("content_id"))
         return result
 
@@ -77,7 +80,10 @@ class Orchestrator:
         """
         logger.info("开始分析线索")
         result = self.lead_analyzer.analyze(lead_data)
-        self.db.save_lead_analysis(result, conn=conn)
+        try:
+            self.db.save_lead_analysis(result, conn=conn)
+        except Exception as e:
+            logger.error("保存线索分析结果失败: %s", e, exc_info=True)
         logger.info("线索分析完成, lead_id=%s", result.get("lead_id"))
         return result
 
@@ -107,13 +113,17 @@ class Orchestrator:
             raise ValueError(f"线索分析 {lead_id} 不存在")
 
         # 执行匹配
-        match_result = self.match_engine.match(
-            content_data["analysis_json"], lead_data["profile_json"]
-        )
+        try:
+            match_result = self.match_engine.match(
+                content_data["analysis_json"], lead_data["profile_json"]
+            )
+        except Exception as e:
+            logger.error("匹配执行失败: %s", e, exc_info=True)
+            raise RuntimeError(f"匹配失败: {str(e)}") from e
 
         # 注入 content_id 和 lead_id 到 snapshot 中，供 save_match_result 使用
-        match_result["content_snapshot"]["content_id"] = content_id
-        match_result["lead_snapshot"]["lead_id"] = lead_id
+        match_result.setdefault("content_snapshot", {})["content_id"] = content_id
+        match_result.setdefault("lead_snapshot", {})["lead_id"] = lead_id
 
         # 保存结果
         self.db.save_match_result(match_result)
@@ -311,7 +321,7 @@ class Orchestrator:
         logger.info("开始批量分析内容, 数量=%d", len(scripts))
         results = self.content_analyzer.batch_analyze(scripts)
         # 批量保存（单事务）
-        success_data = [r["data"] for r in results if r.get("success")]
+        success_data = [r.get("data") for r in results if r.get("success") and r.get("data")]
         try:
             saved_count = self.db.save_content_analyses_batch(success_data)
         except Exception as e:
@@ -333,7 +343,7 @@ class Orchestrator:
         logger.info("开始批量分析线索, 数量=%d", len(leads))
         results = self.lead_analyzer.batch_analyze(leads)
         # 批量保存（单事务）
-        success_data = [r["data"] for r in results if r.get("success")]
+        success_data = [r.get("data") for r in results if r.get("success") and r.get("data")]
         try:
             saved_count = self.db.save_lead_analyses_batch(success_data)
         except Exception as e:
@@ -367,15 +377,18 @@ class Orchestrator:
 
         # 转换格式
         content_list = [
-            {"analysis": c["analysis_json"], "content_id": c["id"]} for c in contents
+            {"analysis": c.get("analysis_json", {}), "content_id": c.get("id", "")}
+            for c in contents
+            if c.get("analysis_json")
         ]
         lead_list = [
             {
-                "profile": lead["profile_json"],
-                "lead_id": lead["id"],
+                "profile": lead.get("profile_json", {}),
+                "lead_id": lead.get("id", ""),
                 "raw_data": lead.get("raw_data_json", {}),
             }
             for lead in leads
+            if lead.get("profile_json")
         ]
 
         results = self.match_engine.batch_match(
@@ -426,13 +439,30 @@ class Orchestrator:
         """
         logger.info("获取仪表盘数据, recent_limit=%d", recent_limit)
 
-        # 使用优化的单连接查询获取统计数据
-        stats = self.db.get_dashboard_stats_optimized()
+        try:
+            stats = self.db.get_dashboard_stats_optimized()
+        except Exception as e:
+            logger.error("获取仪表盘统计失败: %s", e, exc_info=True)
+            stats = {"content_count": 0, "lead_count": 0, "match_count": 0,
+                     "strategy_count": 0, "avg_content_score": 0, "avg_lead_quality": 0}
 
-        # 只在需要详细数据时才查询列表（使用分页查询）
-        recent_contents, _ = self.db.get_content_analyses_paginated(page=1, page_size=recent_limit)
-        recent_leads, _ = self.db.get_lead_analyses_paginated(page=1, page_size=recent_limit)
-        recent_matches = self.db.get_all_match_results(limit=recent_limit)
+        try:
+            recent_contents, _ = self.db.get_content_analyses_paginated(page=1, page_size=recent_limit)
+        except Exception as e:
+            logger.error("获取最近内容分析失败: %s", e, exc_info=True)
+            recent_contents = []
+
+        try:
+            recent_leads, _ = self.db.get_lead_analyses_paginated(page=1, page_size=recent_limit)
+        except Exception as e:
+            logger.error("获取最近线索分析失败: %s", e, exc_info=True)
+            recent_leads = []
+
+        try:
+            recent_matches = self.db.get_all_match_results(limit=recent_limit)
+        except Exception as e:
+            logger.error("获取最近匹配结果失败: %s", e, exc_info=True)
+            recent_matches = []
 
         dashboard = {
             "stats": {

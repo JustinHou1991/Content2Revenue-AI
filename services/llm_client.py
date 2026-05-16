@@ -383,9 +383,12 @@ class LLMClient:
                         temperature=temperature,
                         max_tokens=max_tokens or self.config["max_tokens_default"],
                     )
-                self._record_usage(response)
+                try:
+                    self._record_usage(response)
+                except Exception:
+                    pass
                 elapsed = time.monotonic() - start_time
-                content = response.choices[0].message.content or ""
+                content = (response.choices[0].message.content or "") if response.choices else ""
                 logger.info(
                     "chat() 完成: model=%s, tokens=%d, 耗时=%.2fs",
                     self.model,
@@ -436,13 +439,14 @@ class LLMClient:
             不支持缓存，每次都是实时调用
         """
         try:
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens or self.config["max_tokens_default"],
-                stream=True,
-            )
+            with self._global_semaphore:
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens or self.config["max_tokens_default"],
+                    stream=True,
+                )
             full_content_parts: List[str] = []
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -539,8 +543,11 @@ class LLMClient:
                             max_tokens=max_tokens or self.config["max_tokens_default"],
                             response_format={"type": "json_object"},
                         )
-                    self._record_usage(api_response)
-                    content = api_response.choices[0].message.content
+                    try:
+                        self._record_usage(api_response)
+                    except Exception:
+                        pass
+                    content = (api_response.choices[0].message.content if api_response.choices else "")
                     if not content:
                         raise RuntimeError("模型返回了空内容，请重试或调整prompt")
                     response = json.loads(content)

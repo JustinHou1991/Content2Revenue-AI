@@ -417,8 +417,9 @@ def render_history_list(
         )
         return
 
-    for record in records:
-        with st.expander(expander_title_func(record)):
+    for idx, record in enumerate(records):
+        record_id = record.get(title_key, f"record_{idx}")
+        with st.expander(expander_title_func(record), key=f"history_expander_{record_id}_{idx}"):
             content_func(record)
 
 

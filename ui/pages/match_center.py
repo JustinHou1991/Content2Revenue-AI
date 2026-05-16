@@ -148,11 +148,11 @@ class MatchCenterPage(MatchPage):
 
         col1, col2 = st.columns(2)
         with col1:
-            selected_content = st.selectbox("选择内容", list(content_options.keys()))
+            selected_content = st.selectbox("选择内容", list(content_options.keys()), key="match_single_content")
         with col2:
-            selected_lead = st.selectbox("选择线索", list(lead_options.keys()))
+            selected_lead = st.selectbox("选择线索", list(lead_options.keys()), key="match_single_lead")
 
-        if st.button("开始匹配", type="primary", use_container_width=True):
+        if st.button("开始匹配", type="primary", use_container_width=True, key="match_single_btn"):
             content_id = content_options[selected_content]
             lead_id = lead_options[selected_lead]
 
@@ -169,9 +169,9 @@ class MatchCenterPage(MatchPage):
     def _render_batch_match(self):
         st.subheader("批量匹配所有内容与线索")
 
-        top_k = st.slider("每个线索返回的匹配数量", 1, 10, 3)
+        top_k = st.slider("每个线索返回的匹配数量", 1, 10, 3, key="match_batch_topk")
 
-        if st.button("开始批量匹配", type="primary", use_container_width=True):
+        if st.button("开始批量匹配", type="primary", use_container_width=True, key="match_batch_btn"):
             orchestrator = self._get_orchestrator()
 
             contents = orchestrator.db.get_all_content_analyses(limit=500)

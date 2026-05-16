@@ -255,7 +255,7 @@ class ContentAnalyzer(BaseAnalyzer):
 
             try:
                 result = self.analyze(
-                    script_text=script["script_text"],
+                    script_text=script.get("script_text", ""),
                     script_id=script.get("script_id"),
                 )
                 results.append(
@@ -309,7 +309,7 @@ class ContentAnalyzer(BaseAnalyzer):
         analyses: List[Dict[str, Any]] = [
             r["data"]["analysis"]
             for r in analysis_results
-            if r.get("success", True) and "data" in r
+            if r.get("success", True) and isinstance(r.get("data"), dict) and "analysis" in r["data"]
         ]
 
         if not analyses:

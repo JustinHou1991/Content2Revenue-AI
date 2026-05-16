@@ -303,7 +303,7 @@ def empty_state(
         if action_callback:
             clicked = st.button(
                 action_label,
-                key=f"empty_state_btn_{key}" if key else None,
+                key=f"empty_state_btn_{key}" if key else f"empty_state_btn_{id(action_label)}",
                 use_container_width=False,
             )
             if clicked:
@@ -384,7 +384,7 @@ def page_header(
 def tabs(
     options: List[str],
     default: Optional[str] = None,
-    key: Optional[str] = None,
+    key: str = "",
 ) -> str:
     """
     自定义标签页组件，替代 st.tabs，支持底部指示线动画。
@@ -405,7 +405,7 @@ def tabs(
     if not options:
         return ""
 
-    _key = f"tabs_{key}" if key else "tabs_default"
+    _key = f"tabs_{key}" if key else f"tabs_{id(options)}"
     if _key not in st.session_state:
         st.session_state[_key] = default if default else options[0]
 
@@ -492,7 +492,7 @@ def progress_indicator(
 def metric_row(
     metrics: List[Dict[str, Any]],
     columns: int = 4,
-    key: Optional[str] = None,
+    key: str = "",
 ) -> None:
     """
     一行排列多个指标卡片。
@@ -511,6 +511,7 @@ def metric_row(
         ], key="dashboard_top")
     """
     cols = st.columns(columns)
+    _key_prefix = key if key else f"metric_row_{id(metrics)}"
     for i, m in enumerate(metrics):
         with cols[i % columns]:
             metric_card(
@@ -521,7 +522,7 @@ def metric_row(
                 icon=m.get("icon", ""),
                 trend=m.get("trend", "up"),
                 border_color=m.get("border_color"),
-                key=f"{key}_{i}",
+                key=f"{_key_prefix}_{i}",
             )
 
 
@@ -634,7 +635,7 @@ def sidebar_logo(
 def sidebar_nav(
     items: List[Dict[str, str]],
     active_key: Optional[str] = None,
-    key: Optional[str] = None,
+    key: str = "",
 ) -> Optional[str]:
     """
     侧边栏导航菜单组件。
@@ -654,8 +655,8 @@ def sidebar_nav(
             {"label": "数据分析", "icon": "📈", "key": "analytics"},
         ], active_key="dashboard")
     """
+    _nav_key = key if key else f"sidebar_nav_{id(items)}"
     clicked_key = None
-
     for item in items:
         is_active = active_key == item.get("key")
         active_class = "c2r-nav-item--active" if is_active else ""
@@ -673,7 +674,7 @@ def sidebar_nav(
         with col2:
             if st.button(
                 item.get("label", ""),
-                key=f"nav_{item.get('key', '')}_{key}",
+                key=f"nav_{item.get('key', '')}_{_nav_key}",
                 use_container_width=True,
             ):
                 clicked_key = item.get("key")

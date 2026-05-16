@@ -201,6 +201,7 @@ class LeadAnalysisPage(AnalysisPage):
                     f"🚀 开始批量分析（{len(df)} 条线索）",
                     type="primary",
                     use_container_width=True,
+                    key="lead_batch_analyze_btn",
                 )
 
                 if batch_btn:

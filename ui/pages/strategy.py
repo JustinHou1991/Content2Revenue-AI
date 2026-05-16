@@ -81,9 +81,9 @@ class StrategyPage(BasePage):
             label = f"[匹配{score}/10] 📝{c_info} ↔ 👤{l_info} | {m['created_at'][:10]}"
             match_options[label] = m["id"]
 
-        selected = st.selectbox("选择匹配结果", list(match_options.keys()))
+        selected = st.selectbox("选择匹配结果", list(match_options.keys()), key="strategy_select_match")
 
-        if st.button("生成策略建议", type="primary", use_container_width=True):
+        if st.button("生成策略建议", type="primary", use_container_width=True, key="strategy_generate_btn"):
             match_id = match_options[selected]
 
             with st.spinner("AI正在生成策略建议..."):
