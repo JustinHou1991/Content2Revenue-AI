@@ -10,7 +10,10 @@ import traceback
 import logging
 
 from dotenv import load_dotenv
-load_dotenv()
+import pathlib
+_env_path = pathlib.Path(__file__).parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=str(_env_path), override=False)
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
