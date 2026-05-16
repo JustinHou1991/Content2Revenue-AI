@@ -421,7 +421,43 @@ class StrategyPage(BasePage):
         """展示历史策略（完整内容 + 反馈入口）"""
         st.subheader("历史策略建议")
         try:
-            strategies = self._get_orchestrator().db.get_all_strategy_advices(limit=10)
+            search_query = self._render_search_filter(
+                "strategy_history",
+                placeholder="搜索 Hook、结构、转化率、关键词...",
+            )
+
+            page_size = 10
+            page = self._get_current_page("strategy_history")
+
+            strategies, total_count = self._get_orchestrator().db.get_strategy_advices_paginated(
+                page=page + 1, page_size=page_size
+            )
+
+            if total_count == 0:
+                empty_state(
+                    title="暂无策略记录",
+                    description="请先进行内容-线索匹配，再生成策略建议",
+                    icon="📈",
+                )
+                return
+
+            if search_query:
+                query_lower = search_query.lower()
+                filtered = []
+                for s in strategies:
+                    strategy = s.get("strategy_json", {})
+                    cs = strategy.get("content_strategy", {})
+                    searchable = " ".join([
+                        str(cs.get("recommended_hook", "")),
+                        str(cs.get("recommended_structure", "")),
+                        str(strategy.get("conversion_prediction", {}).get("estimated_conversion_rate", "")),
+                        " ".join(cs.get("keywords_to_include", [])),
+                        " ".join(cs.get("keywords_to_avoid", [])),
+                    ]).lower()
+                    if query_lower in searchable:
+                        filtered.append(s)
+                strategies = filtered
+
             if strategies:
                 for s in strategies:
                     strategy = s.get("strategy_json", {})
@@ -580,6 +616,8 @@ class StrategyPage(BasePage):
                             self._render_feedback_form(s, form_key_prefix="history")
                         else:
                             st.caption("✅ 已提交反馈，感谢您的参与！")
+
+                self._render_pagination(total_count, page_size, "strategy_history")
             else:
                 empty_state(
                     title="暂无策略建议记录",

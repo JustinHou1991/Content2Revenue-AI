@@ -58,8 +58,37 @@ TEXT_SECONDARY = "#94A3B8"
 TEXT_TERTIARY = "#64748B"
 
 # 边框色
-BORDER_COLOR = "rgba(255, 255, 255, 0.06)"
-GRID_COLOR = "rgba(255, 255, 255, 0.04)"
+BORDER_COLOR = "#2D2D3D"
+GRID_COLOR = "rgba(255, 255, 255, 0.05)"
+
+
+def hex_to_rgba(hex_color: str, alpha: float) -> str:
+    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def _empty_figure(message: str = "暂无数据") -> Any:
+    """返回空数据占位图"""
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        return None
+    fig = go.Figure()
+    fig.add_annotation(
+        text=f"📊 {message}",
+        x=0.5, y=0.5,
+        xref="paper", yref="paper",
+        showarrow=False,
+        font=dict(size=16, color=TEXT_TERTIARY),
+    )
+    fig.update_layout(
+        **create_chart_theme(),
+        height=200,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+    )
+    return fig
 
 
 # ============================================================
@@ -260,6 +289,8 @@ def radar_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not values:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:
@@ -279,7 +310,7 @@ def radar_chart(
         r=r_values,
         theta=r_labels,
         fill="toself",
-        fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)",
+        fillcolor=hex_to_rgba(color, 0.2),
         line=dict(
             color=color,
             width=2,
@@ -299,8 +330,8 @@ def radar_chart(
     ))
 
     # 显示数值标注
+    annotations = []
     if show_values:
-        annotations = []
         for i, (label, val) in enumerate(zip(labels, values)):
             annotations.append(dict(
                 text=str(int(val)),
@@ -314,6 +345,7 @@ def radar_chart(
             ))
 
     fig.update_layout(
+        annotations=annotations,
         polar=dict(
             radialaxis=dict(
                 visible=True,
@@ -397,6 +429,8 @@ def trend_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not values:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:
@@ -514,6 +548,8 @@ def distribution_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not values:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:
@@ -621,6 +657,8 @@ def multi_trend_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not series:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:
@@ -632,8 +670,8 @@ def multi_trend_chart(
     for i, (name, values) in enumerate(series.items()):
         color = CHART_PALETTE[i % len(CHART_PALETTE)]
         gradient = (
-            f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)",
-            f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.01)",
+            hex_to_rgba(color, 0.15),
+            hex_to_rgba(color, 0.01),
         )
 
         # 面积
@@ -719,6 +757,8 @@ def donut_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not values:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:
@@ -916,6 +956,8 @@ def heatmap_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not z:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:
@@ -930,7 +972,7 @@ def heatmap_chart(
         y=y,
         colorscale=[
             [0, BG_SURFACE],
-            [0.5, f"rgba({int(COLORS['primary'][1:3], 16)}, {int(COLORS['primary'][3:5], 16)}, {int(COLORS['primary'][5:7], 16)}, 0.5)"],
+            [0.5, hex_to_rgba(COLORS["primary"], 0.5)],
             [1, COLORS["primary"]],
         ],
         showscale=False,
@@ -1001,6 +1043,8 @@ def funnel_chart(
         )
         st.plotly_chart(fig, use_container_width=True)
     """
+    if not values:
+        return _empty_figure("暂无数据")
     try:
         import plotly.graph_objects as go
     except ImportError:

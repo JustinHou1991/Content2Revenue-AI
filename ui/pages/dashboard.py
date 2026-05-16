@@ -14,8 +14,73 @@ from ui.components.design_system import (
     callout,
 )
 from ui.styles import COLORS
-from ui.components.charts import score_gauge, funnel_chart, distribution_chart
+from ui.components.charts import score_gauge, funnel_chart, distribution_chart, trend_chart
 from services.sample_data_loader import load_sample_data
+
+
+def render_trend_section(data: dict):
+    """渲染趋势折线图（7天数据分析活动趋势）"""
+    trend = data.get("trend", {})
+    dates = trend.get("dates", [])
+    if not dates:
+        return
+
+    has_data = any(
+        sum(trend.get(k, [])) > 0
+        for k in ["content_counts", "lead_counts", "match_counts"]
+    )
+    if not has_data:
+        return
+
+    st.subheader("7日分析活动趋势")
+
+    fig = trend_chart(
+        dates=dates,
+        values=trend.get("content_counts", []),
+        title="每日分析量",
+        series_name="内容分析",
+        color="primary",
+        height=280,
+    )
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
+
+    total_7d = sum(trend.get("content_counts", []))
+    if total_7d > 0:
+        st.caption(f"📝 过去 7 天共分析 {total_7d} 条内容，平均每日 {total_7d // 7} 条")
+
+
+def render_insight_narrative(data: dict):
+    """数据叙事：将核心指标转化为可读的业务洞察"""
+    stats = data.get("stats", {})
+    if not stats:
+        return
+
+    parts = []
+
+    content_count = stats.get("content_count", 0)
+    lead_count = stats.get("lead_count", 0)
+    match_count = stats.get("match_count", 0)
+    strategy_count = stats.get("strategy_count", 0)
+
+    if content_count > 0:
+        avg_score = data.get("avg_content_score_recent", 0)
+        parts.append(f"已分析 {content_count} 条内容，平均评分 {avg_score}/10")
+
+    if lead_count > 0:
+        avg_lead = data.get("avg_lead_score_recent", 0)
+        parts.append(f"已录入 {lead_count} 条线索，平均质量 {avg_lead}/100")
+
+    if match_count > 0:
+        avg_match = data.get("avg_match_score_recent", 0)
+        parts.append(f"已完成 {match_count} 次匹配，平均匹配度 {avg_match}/10")
+
+    if strategy_count > 0:
+        parts.append(f"已生成 {strategy_count} 份策略报告")
+
+    if parts:
+        insight = "💡 " + "；".join(parts) + "。"
+        st.info(insight)
 
 
 def render_score_gauges(data: dict):
@@ -279,6 +344,14 @@ def render_dashboard():
 
     # 评分仪表盘（可视化环形进度条）
     render_score_gauges(data)
+
+    divider()
+
+    # 数据叙事
+    render_insight_narrative(data)
+
+    # 7日趋势图
+    render_trend_section(data)
 
     divider()
 

@@ -480,6 +480,12 @@ class Orchestrator:
             "recent_matches": recent_matches[:3],
         }
 
+        try:
+            dashboard["trend"] = self.db.get_daily_counts(days=7)
+        except Exception as e:
+            logger.warning("获取趋势数据失败: %s", e)
+            dashboard["trend"] = {"dates": [], "content_counts": [], "lead_counts": [], "match_counts": []}
+
         logger.info(
             "仪表盘数据: 内容均分=%.1f, 线索均分=%.1f, 匹配均分=%.1f",
             dashboard["avg_content_score_recent"],
