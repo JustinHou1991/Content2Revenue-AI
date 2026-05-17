@@ -60,6 +60,106 @@ def render_trend_section(data: dict):
         st.caption(f"📝 过去 7 天共分析 {total_7d} 条内容，平均每日 {total_7d // 7} 条")
 
 
+def render_quick_actions():
+    """渲染快速操作区（决策导向设计）"""
+    st.markdown("### ⚡ 快速操作")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("📝 新建内容分析", use_container_width=True, type="primary"):
+            st.switch_page("pages/2_内容智能分析.py")
+    
+    with col2:
+        if st.button("👤 新建线索分析", use_container_width=True):
+            st.switch_page("pages/3_线索智能分析.py")
+    
+    with col3:
+        if st.button("🔗 打开匹配中心", use_container_width=True):
+            st.switch_page("pages/4_匹配中心.py")
+    
+    with col4:
+        if st.button("📋 查看策略报告", use_container_width=True):
+            st.switch_page("pages/5_策略中心.py")
+
+
+def render_decision_support(data: dict):
+    """渲染决策支持区域（基于学习的最佳实践）
+    
+    每个指标都应支持特定的决策，而非仅仅展示数字。
+    """
+    stats = data.get("stats", {})
+    if not stats:
+        return
+    
+    content_count = stats.get("content_count", 0)
+    lead_count = stats.get("lead_count", 0)
+    match_count = stats.get("match_count", 0)
+    
+    st.markdown("### 🎯 决策支持")
+    
+    # 根据数据状态提供行动建议
+    suggestions = []
+    
+    if content_count == 0:
+        suggestions.append({
+            "icon": "📝",
+            "title": "开始分析内容",
+            "description": "上传您的抖音脚本，AI将提取特征并评分",
+            "action": "pages/2_内容智能分析.py",
+            "priority": "high"
+        })
+    
+    if lead_count == 0:
+        suggestions.append({
+            "icon": "👤",
+            "title": "录入销售线索",
+            "description": "构建客户画像，了解目标受众特征",
+            "action": "pages/3_线索智能分析.py",
+            "priority": "high"
+        })
+    
+    if content_count > 0 and lead_count > 0 and match_count == 0:
+        suggestions.append({
+            "icon": "🔗",
+            "title": "进行内容-线索匹配",
+            "description": "找到最匹配您线索的内容策略",
+            "action": "pages/4_匹配中心.py",
+            "priority": "high"
+        })
+    
+    if match_count > 0:
+        suggestions.append({
+            "icon": "💡",
+            "title": "生成个性化策略",
+            "description": "基于匹配结果，生成针对性的获客策略",
+            "action": "pages/5_策略中心.py",
+            "priority": "medium"
+        })
+    
+    # 渲染行动建议卡片
+    if suggestions:
+        for i, suggestion in enumerate(suggestions):
+            with st.container():
+                col_icon, col_content = st.columns([1, 5])
+                with col_icon:
+                    st.markdown(f"### {suggestion['icon']}")
+                with col_content:
+                    st.markdown(f"**{suggestion['title']}**")
+                    st.caption(suggestion['description'])
+                
+                priority_color = {
+                    "high": "🔴 高优先级",
+                    "medium": "🟡 中优先级",
+                    "low": "🟢 低优先级"
+                }.get(suggestion['priority'], "")
+                
+                st.markdown(f"_{priority_color}_")
+                
+                if i < len(suggestions) - 1:
+                    st.markdown("---")
+
+
 def render_insight_narrative(data: dict):
     """数据叙事：将核心指标转化为可读的业务洞察"""
     stats = data.get("stats", {})
@@ -242,6 +342,11 @@ def render_dashboard():
             st.info("如果是首次使用，请先在「系统设置」中配置API Key并加载示例数据。")
             stats = None
 
+    # ---- 快速操作区（决策导向设计）----
+    if is_initialized:
+        render_quick_actions()
+        divider()
+
     # ---- 核心指标卡片（始终渲染） ----
     if stats is not None:
         metric_row([
@@ -360,6 +465,9 @@ def render_dashboard():
 
     # 数据叙事
     render_insight_narrative(data)
+
+    # 决策支持（基于学习的最佳实践）
+    render_decision_support(data)
 
     # 7日趋势图
     render_trend_section(data)
