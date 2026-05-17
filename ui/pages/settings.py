@@ -3,7 +3,10 @@
 """
 
 import streamlit as st
+import logging
 from ui.components.design_system import divider
+
+logger = logging.getLogger(__name__)
 
 
 # 内置模型列表
@@ -150,7 +153,8 @@ def render_settings():
                     st.success(f"连接成功！当前模型: {_model_display_name(model)}")
 
                 except Exception as e:
-                    st.error(f"连接失败: {str(e)}")
+                    logger.error("连接测试失败: %s", e, exc_info=True)
+                    st.error("连接失败，请检查API Key和网络连接")
                     st.session_state.initialized = False
 
         divider()
@@ -237,14 +241,29 @@ def render_settings():
                     with col1:
                         st.markdown(f"- **{display_name}**")
                     with col2:
-                        if st.button("删除", key=f"del_{model_key}"):
-                            LLMClient.remove_custom_model(model_key)
-                            # 清理数据库
-                            db = _get_db()
-                            if db:
-                                for suffix in ["BASE_URL", "API_KEY"]:
-                                    db.delete_setting(f"CUSTOM_MODEL_{display_name}_{suffix}")
-                            st.rerun()
+                        confirm_key = f"confirm_del_{model_key}"
+                        if confirm_key not in st.session_state:
+                            st.session_state[confirm_key] = False
+
+                        if st.session_state[confirm_key]:
+                            btn_col1, btn_col2 = st.columns(2)
+                            with btn_col1:
+                                if st.button("确认", key=f"confirm_yes_{model_key}", type="primary"):
+                                    LLMClient.remove_custom_model(model_key)
+                                    db = _get_db()
+                                    if db:
+                                        for suffix in ["BASE_URL", "API_KEY"]:
+                                            db.delete_setting(f"CUSTOM_MODEL_{display_name}_{suffix}")
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
+                            with btn_col2:
+                                if st.button("取消", key=f"confirm_no_{model_key}"):
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
+                        else:
+                            if st.button("删除", key=f"del_{model_key}"):
+                                st.session_state[confirm_key] = True
+                                st.rerun()
             else:
                 st.info("暂无自定义模型，请使用上方表单添加。")
         except Exception as e:

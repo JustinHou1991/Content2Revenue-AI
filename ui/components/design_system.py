@@ -201,7 +201,7 @@ def data_card(
             {actions_html}
         </div>
         <div class="c2r-data-card-body">
-            {_esc(content)}
+            {content}
         </div>
         {footer_html}
     </div>
@@ -589,9 +589,8 @@ def callout(
         gap: 12px;
         padding: 16px;
         background: {bg_color};
-        border: 1px solid {text_color};
+        border-left: 3px solid {text_color};
         border-radius: var(--radius-lg);
-        border-opacity: 0.3;
     ">
         <span style="font-size: 1.125rem; flex-shrink: 0; color: {text_color};">{display_icon}</span>
         <span style="font-size: 0.875rem; color: var(--text-primary); line-height: 1.5;">{_esc(message)}</span>
@@ -658,26 +657,14 @@ def sidebar_nav(
     _nav_key = key if key else f"sidebar_nav_{id(items)}"
     clicked_key = None
     for item in items:
-        is_active = active_key == item.get("key")
-        active_class = "c2r-nav-item--active" if is_active else ""
-
-        html = f"""
-        <div class="c2r-nav-item {active_class}">
-            <span>{_icon(item.get("icon", ""))}</span>
-            <span>{_esc(item.get("label", ""))}</span>
-        </div>
-        """
-
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            _html(html)
-        with col2:
-            if st.button(
-                item.get("label", ""),
-                key=f"nav_{item.get('key', '')}_{_nav_key}",
-                use_container_width=True,
-            ):
-                clicked_key = item.get("key")
+        icon = item.get("icon", "")
+        label = f"{icon} {item.get('label', '')}" if icon else item.get("label", "")
+        if st.button(
+            label,
+            key=f"nav_{item.get('key', '')}_{_nav_key}",
+            use_container_width=True,
+        ):
+            clicked_key = item.get("key")
 
     return clicked_key
 

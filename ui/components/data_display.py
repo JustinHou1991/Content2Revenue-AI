@@ -441,11 +441,5 @@ def render_tags(
         st.write("无")
         return
 
-    html_tags = ""
     for tag in tags:
-        try:
-            # 尝试使用badge
-            st.badge(tag)
-        except (AttributeError, Exception):
-            # 降级使用status_badge
-            status_badge(tag, color=color, size=size)
+        status_badge(tag, color=color, size=size)

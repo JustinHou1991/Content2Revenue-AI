@@ -6,8 +6,9 @@
 
 import streamlit as st
 import json
+import logging
 
-from ui.base_page import BasePage
+from ui.base_page import BasePage, make_safe_progress
 from ui.components.data_display import render_strategy_content, render_tags
 from ui.components.design_system import (
     page_header,
@@ -19,13 +20,7 @@ from ui.components.design_system import (
 )
 from ui.styles import COLORS
 
-
-def _safe_badge(label, icon=None):
-    """安全渲染标签，兼容旧版 Streamlit（< 1.37）"""
-    try:
-        st.badge(label, icon=icon)
-    except (AttributeError, Exception):
-        status_badge(label, color="purple", size="sm")
+logger = logging.getLogger(__name__)
 
 
 class StrategyPage(BasePage):
@@ -47,11 +42,15 @@ class StrategyPage(BasePage):
         try:
             match_results = self._get_orchestrator().db.get_all_match_results(limit=20)
         except Exception as e:
-            callout(f"加载匹配记录失败: {str(e)}", type="error")
+            logger.error("加载匹配记录失败: %s", e, exc_info=True)
+            callout("加载匹配记录失败，请稍后重试", type="error")
             return
 
         if not match_results:
             callout("暂无匹配记录，请先去「匹配中心」进行内容-线索匹配", type="info")
+            if st.button("🎯 前往匹配中心", use_container_width=True, key="strategy_empty_goto_match"):
+                st.session_state.nav_target = "match"
+                st.rerun()
             return
 
         # 构建选项（优化：显示内容和线索关键信息）
@@ -144,7 +143,8 @@ class StrategyPage(BasePage):
                 c_score = content_snap.get("content_score", "?")
                 c_audience = content_snap.get("target_audience", "未知")
                 c_tags = content_snap.get("topic_tags", [])
-                st.info(f"**{c_hook}** · {c_cat} | 评分 {c_score}/10 | 受众: {c_audience}")
+                with st.container(border=True):
+                    st.caption(f"**{c_hook}** · {c_cat} | 评分 {c_score}/10 | 受众: {c_audience}")
                 if c_tags:
                     st.caption(f"话题: {', '.join(c_tags)}")
             with col_b:
@@ -154,7 +154,8 @@ class StrategyPage(BasePage):
                 l_grade = lead_snap.get("lead_grade", "?")
                 l_intent = lead_snap.get("intent_level", "?")
                 l_pains = lead_snap.get("pain_points", [])
-                st.info(f"**{l_industry}** · {l_stage} | {l_grade}级 | 意向 {l_intent}/10")
+                with st.container(border=True):
+                    st.caption(f"**{l_industry}** · {l_stage} | {l_grade}级 | 意向 {l_intent}/10")
                 if l_pains:
                     st.caption(f"痛点: {', '.join(l_pains[:3])}")
             divider()
@@ -190,12 +191,12 @@ class StrategyPage(BasePage):
         with col1:
             st.markdown("**建议包含的关键词:**")
             for kw in cs.get("keywords_to_include", []):
-                _safe_badge(kw)
+                status_badge(kw, color="purple", size="sm")
 
         with col2:
             st.markdown("**建议避免的关键词:**")
             for kw in cs.get("keywords_to_avoid", []):
-                _safe_badge(kw)
+                status_badge(kw, color="purple", size="sm")
 
         # 分发策略
         ds = strategy.get("distribution_strategy", {})
@@ -259,10 +260,10 @@ class StrategyPage(BasePage):
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**方案A:**")
-            st.info(ab.get("variant_a", ""))
+            st.markdown(f"> {ab.get('variant_a', '')}")
         with col2:
             st.markdown("**方案B:**")
-            st.info(ab.get("variant_b", ""))
+            st.markdown(f"> {ab.get('variant_b', '')}")
 
         st.write(f"**测试指标:** {ab.get('test_metric', '未知')}")
 
@@ -295,12 +296,7 @@ class StrategyPage(BasePage):
         progress_bar = st.empty()
         status_text = st.empty()
 
-        def _safe_progress(val, text):
-            try:
-                progress_bar.progress(val, text=text)
-            except TypeError:
-                progress_bar.progress(val)
-                status_text.info(text)
+        _safe_progress = make_safe_progress(progress_bar, status_text)
 
         _safe_progress(0, f"准备生成 {total} 条策略...")
 
@@ -368,7 +364,7 @@ class StrategyPage(BasePage):
                 if actual_conv is not None:
                     st.metric("实际转化率", f"{actual_conv}%")
             if existing_feedback.get("feedback_notes"):
-                st.info(f"**反馈备注:** {existing_feedback['feedback_notes']}")
+                st.markdown(f"> **反馈备注:** {existing_feedback['feedback_notes']}")
             return
 
         with st.form(key=form_key):
@@ -413,7 +409,10 @@ class StrategyPage(BasePage):
                         feedback_notes=feedback_notes if feedback_notes else None,
                     )
                     callout("反馈提交成功！感谢您的参与。", type="success", icon="🎉")
-                    st.balloons()
+                    try:
+                        st.toast("🎉 反馈提交成功！")
+                    except AttributeError:
+                        st.success("🎉 反馈提交成功！")
                     st.rerun()
                 except Exception as e:
                     callout(f"提交反馈失败: {str(e)}", type="error")
@@ -422,7 +421,43 @@ class StrategyPage(BasePage):
         """展示历史策略（完整内容 + 反馈入口）"""
         st.subheader("历史策略建议")
         try:
-            strategies = self._get_orchestrator().db.get_all_strategy_advices(limit=10)
+            search_query = self._render_search_filter(
+                "strategy_history",
+                placeholder="搜索 Hook、结构、转化率、关键词...",
+            )
+
+            page_size = 10
+            page = self._get_current_page("strategy_history")
+
+            strategies, total_count = self._get_orchestrator().db.get_strategy_advices_paginated(
+                page=page + 1, page_size=page_size
+            )
+
+            if total_count == 0:
+                empty_state(
+                    title="暂无策略记录",
+                    description="请先进行内容-线索匹配，再生成策略建议",
+                    icon="📈",
+                )
+                return
+
+            if search_query:
+                query_lower = search_query.lower()
+                filtered = []
+                for s in strategies:
+                    strategy = s.get("strategy_json", {})
+                    cs = strategy.get("content_strategy", {})
+                    searchable = " ".join([
+                        str(cs.get("recommended_hook", "")),
+                        str(cs.get("recommended_structure", "")),
+                        str(strategy.get("conversion_prediction", {}).get("estimated_conversion_rate", "")),
+                        " ".join(cs.get("keywords_to_include", [])),
+                        " ".join(cs.get("keywords_to_avoid", [])),
+                    ]).lower()
+                    if query_lower in searchable:
+                        filtered.append(s)
+                strategies = filtered
+
             if strategies:
                 for s in strategies:
                     strategy = s.get("strategy_json", {})
@@ -480,12 +515,12 @@ class StrategyPage(BasePage):
                                 if kws_include:
                                     st.markdown("**建议关键词:**")
                                     for kw in kws_include:
-                                        _safe_badge(kw)
+                                        status_badge(kw, color="purple", size="sm")
                             with col2:
                                 if kws_avoid:
                                     st.markdown("**避免关键词:**")
                                     for kw in kws_avoid:
-                                        _safe_badge(kw)
+                                        status_badge(kw, color="purple", size="sm")
 
                         # === 分发策略 ===
                         if ds:
@@ -552,10 +587,10 @@ class StrategyPage(BasePage):
                             col1, col2 = st.columns(2)
                             with col1:
                                 st.markdown("**方案A:**")
-                                st.info(ab.get("variant_a", ""))
+                                st.markdown(f"> {ab.get('variant_a', '')}")
                             with col2:
                                 st.markdown("**方案B:**")
-                                st.info(ab.get("variant_b", ""))
+                                st.markdown(f"> {ab.get('variant_b', '')}")
                             test_metric = ab.get("test_metric", "")
                             if test_metric:
                                 st.write(f"**测试指标**: {test_metric}")
@@ -573,7 +608,7 @@ class StrategyPage(BasePage):
                                 if actual_conv is not None:
                                     st.metric("实际转化率", f"{actual_conv}%")
                             if feedback.get("feedback_notes"):
-                                st.info(f"**备注**: {feedback['feedback_notes']}")
+                                st.markdown(f"> **备注**: {feedback['feedback_notes']}")
 
                         # === 反馈入口 ===
                         st.markdown("---")
@@ -581,6 +616,8 @@ class StrategyPage(BasePage):
                             self._render_feedback_form(s, form_key_prefix="history")
                         else:
                             st.caption("✅ 已提交反馈，感谢您的参与！")
+
+                self._render_pagination(total_count, page_size, "strategy_history")
             else:
                 empty_state(
                     title="暂无策略建议记录",

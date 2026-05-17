@@ -1,11 +1,13 @@
 """
 仪表盘页面 - 全局概览
 使用新设计系统组件 (design_system.py + styles.py)
+
+性能优化：
+- 使用 @st.cache_data 缓存数据加载结果
+- TTL: 60秒（仪表盘数据更新频率）
 """
 
 import streamlit as st
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from ui.components.design_system import (
     page_header,
@@ -16,83 +18,297 @@ from ui.components.design_system import (
     callout,
 )
 from ui.styles import COLORS
+from ui.components.charts import score_gauge, funnel_chart, distribution_chart, trend_chart
+from services.sample_data_loader import load_sample_data
 
 
-def _load_sample_data():
-    """加载示例数据（并发优化版：6次LLM调用并发执行）"""
+@st.cache_data(ttl=60, show_spinner=False)
+def _get_cached_dashboard_data(orchestrator) -> dict:
+    """缓存的仪表盘数据加载函数（60秒 TTL）"""
+    return orchestrator.get_dashboard_data()
+
+
+def render_trend_section(data: dict):
+    """渲染趋势折线图（7天数据分析活动趋势）"""
+    trend = data.get("trend", {})
+    dates = trend.get("dates", [])
+    if not dates:
+        return
+
+    has_data = any(
+        sum(trend.get(k, [])) > 0
+        for k in ["content_counts", "lead_counts", "match_counts"]
+    )
+    if not has_data:
+        return
+
+    st.subheader("7日分析活动趋势")
+
+    fig = trend_chart(
+        dates=dates,
+        values=trend.get("content_counts", []),
+        title="每日分析量",
+        series_name="内容分析",
+        color="primary",
+        height=280,
+    )
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
+
+    total_7d = sum(trend.get("content_counts", []))
+    if total_7d > 0:
+        st.caption(f"📝 过去 7 天共分析 {total_7d} 条内容，平均每日 {total_7d // 7} 条")
+
+
+def render_quick_actions():
+    """渲染快速操作区（决策导向设计）"""
+    st.markdown("### ⚡ 快速操作")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("📝 新建内容分析", use_container_width=True, type="primary"):
+            st.switch_page("pages/2_内容智能分析.py")
+    
+    with col2:
+        if st.button("👤 新建线索分析", use_container_width=True):
+            st.switch_page("pages/3_线索智能分析.py")
+    
+    with col3:
+        if st.button("🔗 打开匹配中心", use_container_width=True):
+            st.switch_page("pages/4_匹配中心.py")
+    
+    with col4:
+        if st.button("📋 查看策略报告", use_container_width=True):
+            st.switch_page("pages/5_策略中心.py")
+
+
+def render_decision_support(data: dict):
+    """渲染决策支持区域（基于学习的最佳实践）
+    
+    每个指标都应支持特定的决策，而非仅仅展示数字。
+    """
+    stats = data.get("stats", {})
+    if not stats:
+        return
+    
+    content_count = stats.get("content_count", 0)
+    lead_count = stats.get("lead_count", 0)
+    match_count = stats.get("match_count", 0)
+    
+    st.markdown("### 🎯 决策支持")
+    
+    # 根据数据状态提供行动建议
+    suggestions = []
+    
+    if content_count == 0:
+        suggestions.append({
+            "icon": "📝",
+            "title": "开始分析内容",
+            "description": "上传您的抖音脚本，AI将提取特征并评分",
+            "action": "pages/2_内容智能分析.py",
+            "priority": "high"
+        })
+    
+    if lead_count == 0:
+        suggestions.append({
+            "icon": "👤",
+            "title": "录入销售线索",
+            "description": "构建客户画像，了解目标受众特征",
+            "action": "pages/3_线索智能分析.py",
+            "priority": "high"
+        })
+    
+    if content_count > 0 and lead_count > 0 and match_count == 0:
+        suggestions.append({
+            "icon": "🔗",
+            "title": "进行内容-线索匹配",
+            "description": "找到最匹配您线索的内容策略",
+            "action": "pages/4_匹配中心.py",
+            "priority": "high"
+        })
+    
+    if match_count > 0:
+        suggestions.append({
+            "icon": "💡",
+            "title": "生成个性化策略",
+            "description": "基于匹配结果，生成针对性的获客策略",
+            "action": "pages/5_策略中心.py",
+            "priority": "medium"
+        })
+    
+    # 渲染行动建议卡片
+    if suggestions:
+        for i, suggestion in enumerate(suggestions):
+            with st.container():
+                col_icon, col_content = st.columns([1, 5])
+                with col_icon:
+                    st.markdown(f"### {suggestion['icon']}")
+                with col_content:
+                    st.markdown(f"**{suggestion['title']}**")
+                    st.caption(suggestion['description'])
+                
+                priority_color = {
+                    "high": "🔴 高优先级",
+                    "medium": "🟡 中优先级",
+                    "low": "🟢 低优先级"
+                }.get(suggestion['priority'], "")
+                
+                st.markdown(f"_{priority_color}_")
+                
+                if i < len(suggestions) - 1:
+                    st.markdown("---")
+
+
+def render_insight_narrative(data: dict):
+    """数据叙事：将核心指标转化为可读的业务洞察"""
+    stats = data.get("stats", {})
+    if not stats:
+        return
+
+    parts = []
+
+    content_count = stats.get("content_count", 0)
+    lead_count = stats.get("lead_count", 0)
+    match_count = stats.get("match_count", 0)
+    strategy_count = stats.get("strategy_count", 0)
+
+    if content_count > 0:
+        avg_score = data.get("avg_content_score_recent", 0)
+        parts.append(f"已分析 {content_count} 条内容，平均评分 {avg_score}/10")
+
+    if lead_count > 0:
+        avg_lead = data.get("avg_lead_score_recent", 0)
+        parts.append(f"已录入 {lead_count} 条线索，平均质量 {avg_lead}/100")
+
+    if match_count > 0:
+        avg_match = data.get("avg_match_score_recent", 0)
+        parts.append(f"已完成 {match_count} 次匹配，平均匹配度 {avg_match}/10")
+
+    if strategy_count > 0:
+        parts.append(f"已生成 {strategy_count} 份策略报告")
+
+    if parts:
+        insight = "💡 " + "；".join(parts) + "。"
+        st.info(insight)
+
+
+def render_score_gauges(data: dict):
+    """渲染评分仪表盘"""
+    st.subheader("核心评分指标")
+
+    avg_content = data.get("avg_content_score_recent", 0)
+    avg_lead = data.get("avg_lead_score_recent", 0)
+    avg_match = data.get("avg_match_score_recent", 0)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        content_val = float(avg_content) if isinstance(avg_content, (int, float)) else 0
+        if content_val > 0:
+            fig = score_gauge(
+                value=content_val,
+                max_value=10,
+                title="内容评分",
+                size=200,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        lead_val = float(avg_lead) if isinstance(avg_lead, (int, float)) else 0
+        if lead_val > 0:
+            fig = score_gauge(
+                value=lead_val,
+                max_value=100,
+                title="线索评分",
+                size=200,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col3:
+        match_val = float(avg_match) if isinstance(avg_match, (int, float)) else 0
+        if match_val > 0:
+            fig = score_gauge(
+                value=match_val,
+                max_value=10,
+                title="匹配度",
+                size=200,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def render_score_distribution(data: dict):
+    """渲染评分分布图"""
     try:
-        from data.sample_data import SAMPLE_SCRIPTS, SAMPLE_LEADS
-
-        progress_bar = st.empty()
-        status_text = st.empty()
-
-        try:
-            bar = progress_bar.progress(0, text="正在加载示例数据...")
-        except TypeError:
-            bar = progress_bar.progress(0)
-            status_text.caption("正在加载示例数据...")
-
-        orchestrator = st.session_state.get("orchestrator")
-        if not orchestrator:
-            st.error("系统未初始化，请先配置API Key")
+        contents = data.get("recent_contents", [])
+        if not contents:
             return
 
-        total = len(SAMPLE_SCRIPTS) + len(SAMPLE_LEADS)
-        completed = 0
-        lock = threading.Lock()
-
-        def _analyze_script(index, sample):
+        scores = []
+        for item in contents:
+            analysis = item.get("analysis_json", {})
+            score = analysis.get("content_score", 0)
             try:
-                orchestrator.analyze_content(sample["script_text"])
-                return index, True, sample["script_id"]
-            except Exception as e:
-                return index, False, f"{sample['script_id']}: {e}"
+                scores.append(float(score))
+            except (ValueError, TypeError):
+                pass
 
-        def _analyze_lead(index, sample):
-            try:
-                orchestrator.analyze_lead(sample["lead_data"])
-                return index, True, sample["lead_id"]
-            except Exception as e:
-                return index, False, f"{sample['lead_id']}: {e}"
+        if not scores:
+            return
 
-        all_futures = {}
+        buckets = {"1-2": 0, "3-4": 0, "5-6": 0, "7-8": 0, "9-10": 0}
+        for s in scores:
+            if s <= 2:
+                buckets["1-2"] += 1
+            elif s <= 4:
+                buckets["3-4"] += 1
+            elif s <= 6:
+                buckets["5-6"] += 1
+            elif s <= 8:
+                buckets["7-8"] += 1
+            else:
+                buckets["9-10"] += 1
 
-        with ThreadPoolExecutor(max_workers=min(8, total)) as executor:
-            for i, sample in enumerate(SAMPLE_SCRIPTS):
-                all_futures[executor.submit(_analyze_script, i, sample)] = ("script", i)
+        fig = distribution_chart(
+            values=list(buckets.values()),
+            labels=list(buckets.keys()),
+            title="内容评分分布",
+            color="primary",
+        )
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        pass
 
-            offset = len(SAMPLE_SCRIPTS)
-            for j, sample in enumerate(SAMPLE_LEADS):
-                all_futures[executor.submit(_analyze_lead, j, sample)] = ("lead", offset + j)
 
-            for future in as_completed(all_futures):
-                tag, pos = all_futures[future]
-                try:
-                    idx, success, label = future.result(timeout=300)
-                    with lock:
-                        completed += 1
-                        pct = completed / total
-                        try:
-                            bar.progress(pct, text=f"加载示例数据... {completed}/{total}")
-                        except TypeError:
-                            bar.progress(pct)
-                except TimeoutError:
-                    with lock:
-                        completed += 1
-                        if tag == "script":
-                            st.warning(f"示例脚本超时")
-                        else:
-                            st.warning(f"示例线索超时")
-                except Exception:
-                    with lock:
-                        completed += 1
+def render_lead_distribution(data: dict):
+    """渲染线索等级分布图"""
+    try:
+        leads = data.get("recent_leads", [])
+        if not leads:
+            return
 
-        progress_bar.empty()
-        status_text.empty()
-        st.success("示例数据加载完成！")
-        st.rerun()
-    except Exception as e:
-        st.error(f"加载示例数据失败: {str(e)}")
+        grades = {"A": 0, "B+": 0, "B": 0, "C+": 0, "C": 0, "D": 0}
+        for item in leads:
+            profile = item.get("profile_json", {})
+            grade = profile.get("lead_grade", "")
+            if grade in grades:
+                grades[grade] += 1
+
+        valid_grades = {k: v for k, v in grades.items() if v > 0}
+        if not valid_grades:
+            return
+
+        fig = distribution_chart(
+            values=list(valid_grades.values()),
+            labels=list(valid_grades.keys()),
+            title="线索等级分布",
+            color="success",
+        )
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        pass
 
 
 def render_dashboard():
@@ -113,17 +329,23 @@ def render_dashboard():
             icon="⚠️",
         )
 
-    # 加载业务数据（仅在已初始化时）
+    # 加载业务数据（仅在已初始化时，使用缓存优化）
     data = None
     stats = None
     if is_initialized:
         try:
-            data = st.session_state.orchestrator.get_dashboard_data()
+            # 使用缓存的数据加载函数（60秒 TTL）
+            data = _get_cached_dashboard_data(st.session_state.orchestrator)
             stats = data["stats"]
         except Exception as e:
             callout(f"加载失败: {str(e)}", type="error", icon="❌")
             st.info("如果是首次使用，请先在「系统设置」中配置API Key并加载示例数据。")
             stats = None
+
+    # ---- 快速操作区（决策导向设计）----
+    if is_initialized:
+        render_quick_actions()
+        divider()
 
     # ---- 核心指标卡片（始终渲染） ----
     if stats is not None:
@@ -231,36 +453,24 @@ def render_dashboard():
                 st.rerun()
         with col3:
             if st.button("🚀 加载示例数据", use_container_width=True, type="primary", key="dashboard_load_samples"):
-                _load_sample_data()
+                load_sample_data()
         return
 
     divider()
 
-    # 平均分指标（基于最近 N 条记录）
-    score_basis = data.get("score_basis_count", 5)
-    metric_row([
-        {
-            "title": "平均内容评分",
-            "value": f"{data['avg_content_score_recent']}/10",
-            "subtitle": f"最近 {score_basis} 条",
-            "icon": "📊",
-            "trend": "neutral",
-        },
-        {
-            "title": "平均线索评分",
-            "value": f"{data['avg_lead_score_recent']}/100",
-            "subtitle": f"最近 {score_basis} 条",
-            "icon": "🗂️",
-            "trend": "neutral",
-        },
-        {
-            "title": "平均匹配度",
-            "value": f"{data['avg_match_score_recent']}/10",
-            "subtitle": f"最近 {score_basis} 条",
-            "icon": "🎯",
-            "trend": "neutral",
-        },
-    ], columns=3, key="dashboard_avg")
+    # 评分仪表盘（可视化环形进度条）
+    render_score_gauges(data)
+
+    divider()
+
+    # 数据叙事
+    render_insight_narrative(data)
+
+    # 决策支持（基于学习的最佳实践）
+    render_decision_support(data)
+
+    # 7日趋势图
+    render_trend_section(data)
 
     divider()
 

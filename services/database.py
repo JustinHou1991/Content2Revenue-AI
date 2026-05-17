@@ -4,6 +4,16 @@
 
 import os
 import sqlite3
+import json
+import logging
+import base64
+import hashlib
+import time
+from contextlib import contextmanager
+from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime
+
+from utils.performance import log_slow_operations
 
 
 def _get_default_db_path() -> str:
@@ -26,14 +36,6 @@ def _get_default_db_path() -> str:
 
     # 3. 本地开发
     return "data/c2r.db"
-import json
-import logging
-import base64
-import hashlib
-import time
-from contextlib import contextmanager
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -799,6 +801,21 @@ class Database:
             ).fetchall()
             return [self._row_to_dict(row) for row in rows]
 
+    def get_strategy_advices_paginated(
+        self, page: int = 1, page_size: int = 10
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """分页获取策略建议"""
+        with self._get_conn() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM strategy_advice"
+            ).fetchone()[0]
+            offset = (page - 1) * page_size
+            rows = conn.execute(
+                "SELECT * FROM strategy_advice ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (page_size, offset),
+            ).fetchall()
+            return [self._row_to_dict(row) for row in rows], total
+
     def get_all_strategy_advices_with_feedback(self, limit: int = 100) -> List[Dict[str, Any]]:
         """获取策略建议及反馈（单查询，避免N+1问题）"""
         with self._get_conn() as conn:
@@ -854,6 +871,7 @@ class Database:
             "strategy_count": strategy_count,
         }
 
+    @log_slow_operations(threshold_ms=2000)  # 2秒阈值
     def get_dashboard_stats_optimized(self) -> Dict[str, Any]:
         """优化后的仪表盘统计（单连接）"""
         with self._get_conn() as conn:
@@ -887,6 +905,60 @@ class Database:
                 "avg_content_score": round(row[5], 2),
                 "avg_lead_score": round(row[6], 2),
             }
+
+    def get_daily_counts(self, days: int = 7) -> Dict[str, List]:
+        """获取按天聚合的统计趋势"""
+        result = {"dates": [], "content_counts": [], "lead_counts": [], "match_counts": []}
+        try:
+            with self._get_conn() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT
+                        substr(created_at, 1, 10) as day,
+                        COUNT(*) as cnt
+                    FROM content_analysis
+                    GROUP BY day
+                    ORDER BY day DESC
+                    LIMIT ?
+                """, (days,))
+                content_by_day = {row["day"]: row["cnt"] for row in cursor.fetchall()}
+
+                cursor.execute("""
+                    SELECT
+                        substr(created_at, 1, 10) as day,
+                        COUNT(*) as cnt
+                    FROM lead_analysis
+                    GROUP BY day
+                    ORDER BY day DESC
+                    LIMIT ?
+                """, (days,))
+                lead_by_day = {row["day"]: row["cnt"] for row in cursor.fetchall()}
+
+                cursor.execute("""
+                    SELECT
+                        substr(created_at, 1, 10) as day,
+                        COUNT(*) as cnt
+                    FROM match_results
+                    GROUP BY day
+                    ORDER BY day DESC
+                    LIMIT ?
+                """, (days,))
+                match_by_day = {row["day"]: row["cnt"] for row in cursor.fetchall()}
+
+                import datetime
+                today = datetime.date.today()
+                for i in range(days - 1, -1, -1):
+                    day_str = (today - datetime.timedelta(days=i)).isoformat()
+                    result["dates"].append(day_str[5:])
+                    result["content_counts"].append(content_by_day.get(day_str, 0))
+                    result["lead_counts"].append(lead_by_day.get(day_str, 0))
+                    result["match_counts"].append(match_by_day.get(day_str, 0))
+
+        except Exception as e:
+            logger.warning("获取每日趋势数据失败: %s", e)
+
+        return result
 
     # ===== 设置管理 =====
 
