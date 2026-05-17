@@ -66,3 +66,73 @@ Traceback (most recent call last):
     raise StreamlitSecretNotFoundError(error_msg)
 streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/content2revenue/.streamlit/secrets.toml
 2026-05-09 06:38:18 | INFO     | root                           | 日志系统初始化完成: level=INFO, log_file=/workspace/content2revenue/data/logs/c2r.log
+2026-05-17 01:20:42 | INFO     | root                           | 日志系统初始化完成: level=INFO, log_file=/workspace/data/logs/c2r.log
+2026-05-17 01:20:42 | INFO     | services.database              | cryptography库可用，将使用Fernet对称加密
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存内容分析: content-001
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存线索分析: lead-001
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存匹配结果: match-001 (content=content-001, lead=lead-001)
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存匹配结果: match-001 (content=content-001, lead=lead-001)
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-001
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-000
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-001
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-002
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-001
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-002
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存内容分析: content-001
+2026-05-17 01:20:42 | INFO     | services.database              | 保存线索分析: lead-001
+2026-05-17 01:20:42 | INFO     | services.database              | 保存匹配结果: match-001 (content=content-001, lead=lead-001)
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-001
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存内容分析: content-001
+2026-05-17 01:20:42 | INFO     | services.database              | 保存线索分析: lead-001
+2026-05-17 01:20:42 | INFO     | services.database              | 保存匹配结果: match-001 (content=content-001, lead=lead-001)
+2026-05-17 01:20:42 | INFO     | services.database              | 保存策略建议: strategy-001
+2026-05-17 01:20:42 | INFO     | services.database              | 所有数据已清空
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | INFO     | services.database              | 保存内容分析: content-001
+2026-05-17 01:20:42 | INFO     | services.database              | 数据库表初始化完成
+2026-05-17 01:20:42 | INFO     | services.database              | 已生成新的Fernet加密密钥并存储到数据库
+2026-05-17 01:20:42 | WARNING  | services.database              | JSON解析失败，保留原始字符串: 字段=analysis_json, 值={invalid json}
+2026-05-17 01:20:55 | INFO     | root                           | 日志系统初始化完成: level=INFO, log_file=/workspace/data/logs/c2r.log
+2026-05-17 01:20:55 | INFO     | services.database              | cryptography库可用，将使用Fernet对称加密
+2026-05-17 01:20:55 | WARNING  | config                         | 从数据库读取配置失败: no such table: app_settings
+2026-05-17 01:20:56 | WARNING  | config                         | secrets.toml 读取失败: No secrets found. Valid paths for a secrets.toml file or secret directories are: /root/.streamlit/secrets.toml, /workspace/.streamlit/secrets.toml
+2026-05-17 01:20:56 | INFO     | config                         | 配置加载完成 (model=deepseek-chat, db_path=data/c2r.db, log_level=INFO)
+2026-05-17 01:20:58 | INFO     | root                           | 日志系统初始化完成: level=INFO, log_file=/workspace/data/logs/c2r.log
+2026-05-17 01:20:58 | INFO     | services.database              | cryptography库可用，将使用Fernet对称加密
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 检测到危险模式: <script[^>]*>.*?</script>
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 输入文本过长 (20000 > 1000)，已截断
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 检测到危险模式: <script[^>]*>.*?</script>
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 检测到危险模式: javascript:
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 检测到危险模式: on\w+\s*=
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 检测到危险模式: <script[^>]*>.*?</script>
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | CSV 行数过多 (15000 > 10000)，已截断
+2026-05-17 01:20:58 | WARNING  | utils.input_validator          | 检测到危险模式: <script[^>]*>.*?</script>
