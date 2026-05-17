@@ -1,4 +1,5 @@
 """页面基类 - 提供公共的页面功能"""
+
 import streamlit as st
 from typing import Optional, Dict, Any, List, Callable
 from abc import ABC, abstractmethod
@@ -18,10 +19,25 @@ def make_safe_progress(progress_bar, status_text):
 class BasePage(ABC):
     """页面基类 - 提供统一的页面结构和公共功能"""
 
+    # 性能优化：避免重复渲染的标记
+    _rendered_cache: Dict[str, bool] = {}
+
     def __init__(self, title: str, icon: str, description: str = ""):
         self.title = title
         self.icon = icon
         self.description = description
+
+    def should_render(self, key: str) -> bool:
+        """检查是否应该渲染某个组件（用于避免重复渲染）"""
+        if key not in st.session_state:
+            st.session_state[key] = True
+            return True
+        return False
+
+    def invalidate_cache(self, key: str):
+        """使缓存失效"""
+        if key in st.session_state:
+            st.session_state[key] = True
 
     def render(self):
         """渲染页面（模板方法）"""

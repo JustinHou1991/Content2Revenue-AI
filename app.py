@@ -92,6 +92,20 @@ from ui.styles import inject_base_css
 inject_base_css()
 
 
+# ============================================================
+# Streamlit 缓存策略
+# ============================================================
+# @st.cache_resource: 用于缓存不可序列化的资源（如数据库连接、模型实例）
+# 生命周期：整个应用会话，跨页面共享
+# ============================================================
+
+@st.cache_resource(ttl=3600, show_spinner=False)
+def _get_cached_orchestrator(model: str, api_key: str):
+    """缓存的 orchestrator 实例，避免重复初始化"""
+    from services.orchestrator import Orchestrator
+    return Orchestrator(model=model, api_key=api_key)
+
+
 def _safe_error_message(error: Exception) -> str:
     """将内部错误转换为用户友好的消息"""
     error_str = str(error) if error else ""
@@ -106,12 +120,11 @@ def _safe_error_message(error: Exception) -> str:
 
 
 def _auto_init_orchestrator():
-    """使用固化配置自动初始化编排器"""
+    """使用固化配置自动初始化编排器（带缓存优化）"""
     if st.session_state.orchestrator is not None:
         return True
 
     try:
-        from services.orchestrator import Orchestrator
         from services.llm_client import LLMClient
 
         model = DEFAULT_MODEL
@@ -122,7 +135,8 @@ def _auto_init_orchestrator():
             st.session_state.initialized = False
             return False
 
-        st.session_state.orchestrator = Orchestrator(model=model, api_key=api_key)
+        # 使用缓存的 orchestrator（避免重复初始化）
+        st.session_state.orchestrator = _get_cached_orchestrator(model, api_key)
         st.session_state.initialized = True
         return True
     except Exception as e:

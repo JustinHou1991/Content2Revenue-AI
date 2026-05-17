@@ -1,6 +1,10 @@
 """
 仪表盘页面 - 全局概览
 使用新设计系统组件 (design_system.py + styles.py)
+
+性能优化：
+- 使用 @st.cache_data 缓存数据加载结果
+- TTL: 60秒（仪表盘数据更新频率）
 """
 
 import streamlit as st
@@ -16,6 +20,12 @@ from ui.components.design_system import (
 from ui.styles import COLORS
 from ui.components.charts import score_gauge, funnel_chart, distribution_chart, trend_chart
 from services.sample_data_loader import load_sample_data
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _get_cached_dashboard_data(orchestrator) -> dict:
+    """缓存的仪表盘数据加载函数（60秒 TTL）"""
+    return orchestrator.get_dashboard_data()
 
 
 def render_trend_section(data: dict):
@@ -219,12 +229,13 @@ def render_dashboard():
             icon="⚠️",
         )
 
-    # 加载业务数据（仅在已初始化时）
+    # 加载业务数据（仅在已初始化时，使用缓存优化）
     data = None
     stats = None
     if is_initialized:
         try:
-            data = st.session_state.orchestrator.get_dashboard_data()
+            # 使用缓存的数据加载函数（60秒 TTL）
+            data = _get_cached_dashboard_data(st.session_state.orchestrator)
             stats = data["stats"]
         except Exception as e:
             callout(f"加载失败: {str(e)}", type="error", icon="❌")

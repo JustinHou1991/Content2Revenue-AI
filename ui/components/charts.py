@@ -104,6 +104,7 @@ def create_chart_theme() -> Dict[str, Any]:
         - 统一字体 (Inter)
         - 统一颜色方案
         - 精致的悬停交互效果
+        - 性能优化：禁用拖拽、限制缩放
 
     返回:
         Plotly layout 配置字典
@@ -214,6 +215,10 @@ def create_chart_theme() -> Dict[str, Any]:
             "color": TEXT_TERTIARY,
             "activecolor": TEXT_PRIMARY,
         },
+
+        # === 性能优化：禁用拖拽和缩放 ===
+        "dragmode": False,  # 禁用拖拽，提升渲染性能
+        "scrollzoom": False,  # 禁用滚轮缩放
     }
 
 
