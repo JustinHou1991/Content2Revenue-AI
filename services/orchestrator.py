@@ -15,6 +15,7 @@ from .lead_analyzer import LeadAnalyzer
 from .match_engine import MatchEngine
 from .strategy_advisor import StrategyAdvisor
 from .database import Database
+from utils.performance import log_slow_operations
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,7 @@ class Orchestrator:
         logger.info("批量策略生成完成: 成功=%d/%d", success_count, total)
         return results
 
+    @log_slow_operations(threshold_ms=30000)  # 30秒阈值
     def full_pipeline(
         self, script_text: str, lead_data: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -427,6 +429,7 @@ class Orchestrator:
         logger.info("批量匹配完成, 保存=%d 条结果", saved_count)
         return results
 
+    @log_slow_operations(threshold_ms=5000)  # 5秒阈值
     def get_dashboard_data(self, recent_limit: int = 5) -> Dict[str, Any]:
         """
         获取仪表盘数据（优化版）

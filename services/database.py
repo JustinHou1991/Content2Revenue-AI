@@ -4,6 +4,16 @@
 
 import os
 import sqlite3
+import json
+import logging
+import base64
+import hashlib
+import time
+from contextlib import contextmanager
+from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime
+
+from utils.performance import log_slow_operations
 
 
 def _get_default_db_path() -> str:
@@ -26,14 +36,6 @@ def _get_default_db_path() -> str:
 
     # 3. 本地开发
     return "data/c2r.db"
-import json
-import logging
-import base64
-import hashlib
-import time
-from contextlib import contextmanager
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -869,6 +871,7 @@ class Database:
             "strategy_count": strategy_count,
         }
 
+    @log_slow_operations(threshold_ms=2000)  # 2秒阈值
     def get_dashboard_stats_optimized(self) -> Dict[str, Any]:
         """优化后的仪表盘统计（单连接）"""
         with self._get_conn() as conn:

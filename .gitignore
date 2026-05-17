@@ -13,6 +13,8 @@ env/
 data/*.db
 data/*.db-journal
 data/*.db-wal
+# 日志文件
+data/logs/
 
 # 环境变量和密钥
 .env
